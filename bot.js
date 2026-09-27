@@ -3373,90 +3373,6 @@ function setSkin(value, notify) {
                 }
 
                 // ====================================
-                // COME
-                // ====================================
-
-                if (command === "come") {
-
-                    const player =
-                        bot.players[username];
-
-                    if (
-                        !player ||
-                        !player.entity
-                    ) {
-
-                        bot.chat(
-                            `I can't see you.`
-                        );
-
-                        return;
-                    }
-
-                    bot.pathfinder.setGoal(
-                        new goals.GoalFollow(
-                            player.entity,
-                            2
-                        ),
-                        true
-                    );
-
-                    bot.chat(
-                        "Coming."
-                    );
-
-                    return;
-                }
-
-                // ====================================
-                // FOLLOW
-                // ====================================
-
-                if (command === "follow") {
-
-                    const targetName =
-                        parts[0];
-
-                    if (!targetName) {
-
-                        bot.chat(
-                            "Usage: !follow <player>"
-                        );
-
-                        return;
-                    }
-
-                    const player =
-                        bot.players[targetName];
-
-                    if (
-                        !player ||
-                        !player.entity
-                    ) {
-
-                        bot.chat(
-                            `I can't see ${mention(targetName)}.`
-                        );
-
-                        return;
-                    }
-
-                    bot.pathfinder.setGoal(
-                        new goals.GoalFollow(
-                            player.entity,
-                            2
-                        ),
-                        true
-                    );
-
-                    bot.chat(
-                        `Following ${mention(targetName)}`
-                    );
-
-                    return;
-                }
-
-                // ====================================
                 // LOOK
                 // ====================================
 
@@ -3858,36 +3774,6 @@ function setSkin(value, notify) {
 
                     return;
                 }
-
-                // ====================================
-                // STOP
-                // ====================================
-
-                if (command === "stop") {
-
-                    stopFighting();
-                    stopFleeing();
-                    stopHunting();
-                    stopGuard();
-
-                    isEscapingHazard = false;
-                    isMining = false;
-                    isFarming = false;
-                    isCollecting = false;
-
-                    bot.pathfinder.setGoal(
-                        null
-                    );
-
-                    bot.clearControlStates();
-
-                    bot.chat(
-                        "Stopped."
-                    );
-
-                    return;
-                }
-
 
                 if (command === "coords") {
                     if (!bot.entity) {
