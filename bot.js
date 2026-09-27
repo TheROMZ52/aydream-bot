@@ -3793,7 +3793,7 @@ function setSkin(value, notify) {
                 }
 
                 if (command === "follow") {
-                    const target = findPlayer(parts[0]);
+                    const target = findPlayer(parts[0] || CONTROLLER);
                     if (!target) {
                         bot.chat("Usage: !follow <player>");
                         return;
