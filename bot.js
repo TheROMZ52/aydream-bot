@@ -63,6 +63,110 @@ let VERSION = "1.21.8";
 let CONTROLLER = "TheROMZ53";
 let PASSWORD = "";
 
+let TRUSTED_PLAYERS = new Set();
+
+const PROFILES_FILE = path.join(__dirname, "profiles.json");
+const TRUSTED_FILE = path.join(__dirname, "trusted.json");
+let serverProfiles = new Map();
+
+function loadTrustedPlayers() {
+    try {
+        const saved = JSON.parse(fs.readFileSync(TRUSTED_FILE, "utf8"));
+        TRUSTED_PLAYERS = new Set(
+            Array.isArray(saved)
+                ? saved.filter((name) => typeof name === "string" && name.trim())
+                : []
+        );
+    } catch (error) {
+        TRUSTED_PLAYERS = new Set();
+    }
+}
+
+function saveTrustedPlayers() {
+    try {
+        fs.writeFileSync(TRUSTED_FILE, JSON.stringify([...TRUSTED_PLAYERS].sort(), null, 2));
+    } catch (error) {
+        log("[ERROR] Could not save trusted players:", error.message);
+    }
+}
+
+function isTrustedPlayer(username) {
+    if (!username) return false;
+    return username.toLowerCase() === CONTROLLER.toLowerCase() ||
+        [...TRUSTED_PLAYERS].some((name) => name.toLowerCase() === username.toLowerCase());
+}
+
+function loadProfiles() {
+    try {
+        const saved = JSON.parse(fs.readFileSync(PROFILES_FILE, "utf8"));
+        if (saved && typeof saved === "object") {
+            for (const [name, profile] of Object.entries(saved)) {
+                if (
+                    profile &&
+                    typeof profile.host === "string" &&
+                    Number.isFinite(Number(profile.port)) &&
+                    typeof profile.username === "string" &&
+                    typeof profile.version === "string" &&
+                    typeof profile.controller === "string"
+                ) {
+                    serverProfiles.set(name, {
+                        host: profile.host,
+                        port: Number(profile.port),
+                        username: profile.username,
+                        version: profile.version,
+                        controller: profile.controller,
+                        password: typeof profile.password === "string" ? profile.password : ""
+                    });
+                }
+            }
+        }
+    } catch (error) {
+        serverProfiles = new Map();
+    }
+}
+
+function saveProfiles() {
+    try {
+        fs.writeFileSync(PROFILES_FILE, JSON.stringify(Object.fromEntries(serverProfiles), null, 2));
+    } catch (error) {
+        log("[ERROR] Could not save server profiles:", error.message);
+    }
+}
+
+function saveCurrentProfile(name) {
+    const cleanName = String(name || "").trim();
+    if (!cleanName) return false;
+
+    serverProfiles.set(cleanName, {
+        host: HOST,
+        port: PORT,
+        username: USERNAME,
+        version: VERSION,
+        controller: CONTROLLER,
+        password: PASSWORD
+    });
+
+    saveProfiles();
+    return true;
+}
+
+function switchToProfile(name, notify) {
+    const profile = serverProfiles.get(name);
+    if (!profile) {
+        notify("Profile '" + name + "' not found.");
+        return;
+    }
+
+    HOST = profile.host;
+    PORT = profile.port;
+    USERNAME = profile.username;
+    VERSION = profile.version;
+    CONTROLLER = profile.controller;
+    PASSWORD = profile.password || "";
+
+    manualReconnect(notify);
+}
+
 const THREAT_RANGE = 8;
 const FLEE_HEALTH_THRESHOLD = 8;
 
@@ -70,6 +174,8 @@ const FLEE_DISTANCE = 20;
 const FLEE_MAX_TIME = 15000;
 
 const IDLE_DELAY = 15000;
+const AUTO_DEPOSIT_CHECK_INTERVAL = 5000;
+const AUTO_DEPOSIT_RADIUS = 24;
 
 // Health at/below this, the bot will pre-emptively equip a
 // totem of undying (if it has one) into its off-hand.
@@ -635,7 +741,7 @@ async function runSetupPanel() {
                 if (
                     entity.type === "player" &&
                     entity.username !== bot.username &&
-                    entity.username !== CONTROLLER
+                    !isTrustedPlayer(entity.username)
                 ) {
 
                     return true;
@@ -697,7 +803,8 @@ async function runSetupPanel() {
 
                 if (
                     entity.type === "player" &&
-                    entity.username !== bot.username
+                    entity.username !== bot.username &&
+                    !isTrustedPlayer(entity.username)
                 ) {
 
                     return true;
@@ -1709,12 +1816,75 @@ async function runSetupPanel() {
 
     }
 
+    function getCropInfo(block) {
+        if (!block) return null;
+
+        const crops = {
+            wheat: { seed: "wheat_seeds", maxAge: 7 },
+            carrots: { seed: "carrot", maxAge: 7 },
+            potatoes: { seed: "potato", maxAge: 7 },
+            beetroot: { seed: "beetroot_seeds", maxAge: 3 },
+            nether_wart: { seed: "nether_wart", maxAge: 3 }
+        };
+
+        const info = crops[block.name];
+        if (!info) return null;
+
+        try {
+            const properties = typeof block.getProperties === "function"
+                ? block.getProperties()
+                : null;
+
+            if (properties && properties.age !== undefined && Number(properties.age) < info.maxAge) {
+                return null;
+            }
+        } catch (error) {}
+
+        return info;
+    }
+
+    async function replantCropAt(position, cropInfo) {
+        if (!cropInfo || !bot.entity) return false;
+
+        const soil = bot.blockAt(position.offset(0, -1, 0));
+        const empty = bot.blockAt(position);
+
+        if (
+            !soil ||
+            !empty ||
+            (soil.name !== "farmland" && soil.name !== "soul_sand") ||
+            empty.name !== "air"
+        ) {
+            return false;
+        }
+
+        const seed = bot.inventory.items().find(
+            (item) => item.name === cropInfo.seed
+        );
+
+        if (!seed) return false;
+
+        try {
+            if (bot.entity.position.distanceTo(position) > 4.5) {
+                await bot.pathfinder.goto(
+                    new goals.GoalNear(position.x, position.y, position.z, 3)
+                );
+            }
+
+            await bot.equip(seed, "hand");
+            await bot.placeBlock(soil, new Vec3(0, 1, 0));
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
     // ============================================
     // Dig every non-air block in a box, top layer first so
     // sand/gravel above never buries the bot mid-dig.
     // ============================================
 
-    async function digRegionOnce(box, shouldContinue) {
+    async function digRegionOnce(box, shouldContinue, options = {}) {
 
         // Mining often means tunneling to reach the next block,
         // so switch to movements that allow digging through obstacles.
@@ -1734,6 +1904,12 @@ async function runSetupPanel() {
                         const block = bot.blockAt(pos);
 
                         if (!block || block.name === "air") {
+                            continue;
+                        }
+
+                        const cropInfo = getCropInfo(block);
+
+                        if (options.cropsOnly && !cropInfo) {
                             continue;
                         }
 
@@ -1764,8 +1940,17 @@ async function runSetupPanel() {
 
                         try {
                             await bot.dig(block);
+
+                            if (options.replant && cropInfo) {
+                                await sleep(150);
+                                await replantCropAt(pos, cropInfo);
+                            }
                         } catch (error) {
                             // Already broken or changed under us, keep going.
+                        }
+
+                        if (options.autoDeposit) {
+                            await depositInventoryIfNeeded();
                         }
 
                     }
@@ -1796,10 +1981,15 @@ async function runSetupPanel() {
             `(${box.maxX},${box.maxY},${box.maxZ})...`
         );
 
-        await digRegionOnce(box, () => isMining);
+        try {
+            await digRegionOnce(box, () => isMining, {
+                autoDeposit: true
+            });
+        } finally {
+            isMining = false;
+        }
 
-        isMining = false;
-
+        await depositInventoryIfNeeded();
         notify("Mining finished.");
 
     }
@@ -1818,17 +2008,33 @@ async function runSetupPanel() {
 
         notify("Farming loop started (say 'stop' to end it).");
 
-        while (isFarming) {
+        try {
+            while (isFarming) {
+                await digRegionOnce(box, () => isFarming, {
+                    cropsOnly: true,
+                    replant: true,
+                    autoDeposit: true
+                });
 
-            await digRegionOnce(box, () => isFarming);
+                if (!isFarming) break;
 
-            if (!isFarming) {
-                break;
+                await collectItemsInArea(
+                    box.minX,
+                    box.minY,
+                    box.minZ,
+                    box.maxX,
+                    box.maxY,
+                    box.maxZ,
+                    () => {}
+                );
+
+                if (!isFarming) break;
+
+                await depositInventoryIfNeeded();
+                await sleep(3000);
             }
-
-            // Give crops/blocks time to reappear before the next pass.
-            await sleep(3000);
-
+        } finally {
+            isFarming = false;
         }
 
         notify("Farming loop stopped.");
@@ -1883,10 +2089,12 @@ async function runSetupPanel() {
                     )
                 );
             } catch (error) {
-                break; // couldn't reach it, stop instead of looping forever
+                items.splice(0, 1);
+                continue;
             }
 
-            await sleep(300);
+            await sleep(500);
+            await depositInventoryIfNeeded();
 
         }
 
@@ -2079,7 +2287,7 @@ async function runSetupPanel() {
                 if (
                     entity.type === "player" &&
                     entity.username !== bot.username &&
-                    entity.username !== CONTROLLER
+                    !isTrustedPlayer(entity.username)
                 ) {
                     return true;
                 }
@@ -2567,6 +2775,97 @@ function setSkin(value, notify) {
 
     }
 
+    function isProtectedInventoryItem(item) {
+        if (!item) return true;
+
+        const name = item.name || "";
+
+        if (
+            name.includes("_sword") ||
+            name.includes("_axe") ||
+            name.includes("_pickaxe") ||
+            name.includes("_shovel") ||
+            name.includes("_hoe") ||
+            name.includes("_helmet") ||
+            name.includes("_chestplate") ||
+            name.includes("_leggings") ||
+            name.includes("_boots") ||
+            name === "elytra" ||
+            name === "shield" ||
+            name === "totem_of_undying"
+        ) {
+            return true;
+        }
+
+        return Boolean(
+            mcData &&
+            mcData.items &&
+            mcData.items[item.type] &&
+            mcData.items[item.type].food
+        );
+    }
+
+    function isInventoryNearFull() {
+        if (!bot || !bot.inventory) return false;
+
+        const occupied = bot.inventory.slots
+            .slice(9, 45)
+            .filter(Boolean)
+            .length;
+
+        return occupied >= 34;
+    }
+
+    async function depositInventoryIfNeeded(force = false) {
+        if (!bot || !bot.entity || !bot.inventory) return false;
+        if (!force && !isInventoryNearFull()) return false;
+
+        const chest = bot.findBlock({
+            matching: (block) =>
+                block &&
+                (
+                    block.name === "chest" ||
+                    block.name === "trapped_chest" ||
+                    block.name === "barrel"
+                ),
+            maxDistance: AUTO_DEPOSIT_RADIUS
+        });
+
+        if (!chest) return false;
+
+        let container = null;
+
+        try {
+            container = await bot.openContainer(chest);
+            let moved = 0;
+
+            for (const item of [...bot.inventory.items()]) {
+                if (isProtectedInventoryItem(item)) continue;
+
+                try {
+                    await container.deposit(item.type, item.metadata ?? null, item.count);
+                    moved += item.count;
+                } catch (error) {
+                    break;
+                }
+            }
+
+            container.close();
+
+            if (moved > 0) {
+                markActivity();
+                log("[+] Auto-deposited " + moved + " items.");
+                return true;
+            }
+        } catch (error) {
+            if (container) {
+                try { container.close(); } catch (closeError) {}
+            }
+        }
+
+        return false;
+    }
+
     // ============================================
     // Hazard Detection
     // ============================================
@@ -2877,35 +3176,34 @@ function setSkin(value, notify) {
                     );
 
                 } else if (
-                    roll < 0.65
+                    roll < 0.72
                 ) {
 
-                    const player =
-                        bot.nearestEntity(
-                            (entity) =>
-                                entity.type ===
-                                    "player" &&
-                                entity.username !==
-                                    bot.username &&
-                                bot.entity.position.distanceTo(
-                                    entity.position
-                                ) < 10
-                        );
+                    const pos = bot.entity.position;
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = 3 + Math.floor(Math.random() * 7);
+                    const x = Math.floor(pos.x + Math.cos(angle) * distance);
+                    const z = Math.floor(pos.z + Math.sin(angle) * distance);
+                    const y = Math.floor(pos.y);
 
-                    if (player) {
+                    bot.pathfinder.setGoal(
+                        new goals.GoalNear(x, y, z, 1)
+                    );
 
-                        bot.lookAt(
-                            player.position.offset(
-                                0,
-                                1.6,
-                                0
-                            )
-                        );
+                    const target = bot.nearestEntity(
+                        (entity) =>
+                            entity.type === "player" &&
+                            entity.username !== bot.username &&
+                            !isTrustedPlayer(entity.username) &&
+                            bot.entity.position.distanceTo(entity.position) < 10
+                    );
 
+                    if (target) {
+                        bot.lookAt(target.position.offset(0, 1.6, 0));
                     }
 
                 } else if (
-                    roll < 0.75
+                    roll < 0.8
                 ) {
 
                     // Swing an arm, the way an idle player fidgets with their hand.
@@ -2953,17 +3251,21 @@ function setSkin(value, notify) {
 
     }
 
-    function ensureBackgroundLoops() {
+    function startAutoDepositWatch() {
+        setInterval(() => {
+            if (!bot || !bot.entity || isBusy()) return;
+            depositInventoryIfNeeded();
+        }, AUTO_DEPOSIT_CHECK_INTERVAL);
+    }
 
-        if (backgroundLoopsStarted) {
-            return;
-        }
+    function ensureBackgroundLoops() {
+        if (backgroundLoopsStarted) return;
 
         backgroundLoopsStarted = true;
 
         startHazardWatch();
         startIdleBehavior();
-
+        startAutoDepositWatch();
     }
 
     // ============================================
@@ -3211,6 +3513,11 @@ function setSkin(value, notify) {
 
             log("");
             log("Console commands:");
+            log("profile <list|save|use|delete> [name]");
+            log("trust <player>");
+            log("untrust <player>");
+            log("trusted");
+            log("deposit");
             log("say <message>");
             log("pos");
             log("goto <x> <y> <z>");
@@ -3334,6 +3641,93 @@ function setSkin(value, notify) {
                         .toLowerCase();
 
                 markActivity();
+
+                if (command === "trust") {
+                    const name = parts[0];
+                    if (!name) {
+                        bot.chat("Usage: !trust <player>");
+                        return;
+                    }
+                    TRUSTED_PLAYERS.add(name);
+                    saveTrustedPlayers();
+                    bot.chat("Trusted " + mention(name) + ".");
+                    return;
+                }
+
+                if (command === "untrust") {
+                    const name = parts[0];
+                    if (!name) {
+                        bot.chat("Usage: !untrust <player>");
+                        return;
+                    }
+                    for (const saved of TRUSTED_PLAYERS) {
+                        if (saved.toLowerCase() === name.toLowerCase()) TRUSTED_PLAYERS.delete(saved);
+                    }
+                    saveTrustedPlayers();
+                    bot.chat("Untrusted " + mention(name) + ".");
+                    return;
+                }
+
+                if (command === "trusted") {
+                    bot.chat(
+                        TRUSTED_PLAYERS.size
+                            ? "Trusted: " + [...TRUSTED_PLAYERS].join(", ")
+                            : "Trusted list is empty."
+                    );
+                    return;
+                }
+
+                if (command === "deposit") {
+                    const moved = await depositInventoryIfNeeded(true);
+                    bot.chat(moved ? "Deposit complete." : "No nearby container or nothing to deposit.");
+                    return;
+                }
+
+                if (command === "profile") {
+                    const subcommand = (parts.shift() || "list").toLowerCase();
+
+                    if (subcommand === "list") {
+                        const names = [...serverProfiles.keys()];
+                        bot.chat(names.length ? "Profiles: " + names.join(", ") : "No saved profiles.");
+                        return;
+                    }
+
+                    if (subcommand === "save") {
+                        const name = parts[0];
+                        if (!name) {
+                            bot.chat("Usage: !profile save <name>");
+                            return;
+                        }
+                        saveCurrentProfile(name);
+                        bot.chat("Profile '" + name + "' saved.");
+                        return;
+                    }
+
+                    if (subcommand === "use") {
+                        const name = parts[0];
+                        if (!name) {
+                            bot.chat("Usage: !profile use <name>");
+                            return;
+                        }
+                        switchToProfile(name, (msg) => bot.chat(msg));
+                        return;
+                    }
+
+                    if (subcommand === "delete") {
+                        const name = parts[0];
+                        if (!name || !serverProfiles.has(name)) {
+                            bot.chat("Profile not found.");
+                            return;
+                        }
+                        serverProfiles.delete(name);
+                        saveProfiles();
+                        bot.chat("Profile '" + name + "' deleted.");
+                        return;
+                    }
+
+                    bot.chat("Usage: !profile <list|save|use|delete> [name]");
+                    return;
+                }
 
                 // ====================================
                 // POS
@@ -4481,6 +4875,8 @@ function setSkin(value, notify) {
     }
 
     loadHomes();
+    loadTrustedPlayers();
+    loadProfiles();
 
     // Ask for connection info before doing anything else.
     const setupConfig = await runSetupPanel();
@@ -4491,6 +4887,13 @@ function setSkin(value, notify) {
     VERSION = setupConfig.version;
     CONTROLLER = setupConfig.controller;
     PASSWORD = setupConfig.password || "";
+
+    if (Array.isArray(setupConfig.trustedPlayers)) {
+        TRUSTED_PLAYERS = new Set(
+            setupConfig.trustedPlayers.filter((name) => typeof name === "string" && name.trim())
+        );
+        saveTrustedPlayers();
+    }
 
     startApiServer();
 
@@ -4531,6 +4934,93 @@ function setSkin(value, notify) {
             }
 
             markActivity();
+
+            if (command === "profile") {
+                const subcommand = (parts.shift() || "list").toLowerCase();
+
+                if (subcommand === "list") {
+                    const names = [...serverProfiles.keys()];
+                    log(names.length ? "Profiles: " + names.join(", ") : "No saved profiles.");
+                    return;
+                }
+
+                if (subcommand === "save") {
+                    const name = parts[0];
+                    if (!name) {
+                        log("[!] Usage: profile save <name>");
+                        return;
+                    }
+                    saveCurrentProfile(name);
+                    log("[+] Profile '" + name + "' saved.");
+                    return;
+                }
+
+                if (subcommand === "use") {
+                    const name = parts[0];
+                    if (!name) {
+                        log("[!] Usage: profile use <name>");
+                        return;
+                    }
+                    switchToProfile(name, (msg) => log("[+] " + msg));
+                    return;
+                }
+
+                if (subcommand === "delete") {
+                    const name = parts[0];
+                    if (!name || !serverProfiles.has(name)) {
+                        log("[!] Profile not found.");
+                        return;
+                    }
+                    serverProfiles.delete(name);
+                    saveProfiles();
+                    log("[+] Profile '" + name + "' deleted.");
+                    return;
+                }
+
+                log("[!] Usage: profile <list|save|use|delete> [name]");
+                return;
+            }
+
+            if (command === "trust") {
+                const name = parts[0];
+                if (!name) {
+                    log("[!] Usage: trust <player>");
+                    return;
+                }
+                TRUSTED_PLAYERS.add(name);
+                saveTrustedPlayers();
+                log("[+] Trusted player added: " + name);
+                return;
+            }
+
+            if (command === "untrust") {
+                const name = parts[0];
+                if (!name) {
+                    log("[!] Usage: untrust <player>");
+                    return;
+                }
+                for (const saved of TRUSTED_PLAYERS) {
+                    if (saved.toLowerCase() === name.toLowerCase()) TRUSTED_PLAYERS.delete(saved);
+                }
+                saveTrustedPlayers();
+                log("[+] Trusted player removed: " + name);
+                return;
+            }
+
+            if (command === "trusted") {
+                log(
+                    TRUSTED_PLAYERS.size
+                        ? "Trusted: " + [...TRUSTED_PLAYERS].join(", ")
+                        : "Trusted list is empty."
+                );
+                return;
+            }
+
+            if (command === "deposit") {
+                const moved = await depositInventoryIfNeeded(true);
+                log(moved ? "[+] Deposit complete." : "[!] No nearby container or nothing to deposit.");
+                return;
+            }
 
             // ====================================
             // SAY
