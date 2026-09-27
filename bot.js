@@ -3551,6 +3551,10 @@ function setSkin(value, notify) {
                 log
             });
 
+            bot.pathfinder.thinkTimeout = 10000;
+            bot.pathfinder.tickTimeout = 40;
+            bot.pathfinder.searchRadius = -1;
+
             log(
                 "[+] Pathfinder ready."
             );
