@@ -13,7 +13,7 @@ Add these repository secrets under Settings > Secrets and variables > Actions:
 - AYDREAM_CONTROLLER
 - AYDREAM_PASSWORD
 
-The workflow feeds these values into the existing Aydream startup questions, so local startup behavior stays unchanged.
+The workflow reads these values from GitHub Actions configuration variables (`vars.*`) and feeds them into the existing Aydream startup questions, so local startup behavior stays unchanged. `AYDREAM_PASSWORD` is currently a configuration variable too; because GitHub variables are not masked, use this only for a private personal setup. For a stronger deployment, move the password to a GitHub Actions secret and stop exposing it through the panel.
 
 ## Vercel environment variables
 
