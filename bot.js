@@ -10,6 +10,7 @@ const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
 const http = require("http");
+const crypto = require("crypto");
 
 // ============================================
 // Simple logger: prints to console AND appends
@@ -242,23 +243,23 @@ const HOSTILE_MOBS = new Set([
 
 const CONFIG_FILE = path.join(__dirname, "config.json");
 
-function askQuestion(rl, question, defaultValue) {
+function askQuestion(rl, question, defaultValue, inputLines, inputIndex) {
+    if (!rl) {
+        process.stdout.write(question + " (" + defaultValue + "): \n");
+        const value = inputLines[inputIndex.value++] ?? "";
+        const trimmed = value.trim();
+        return Promise.resolve(trimmed === "" ? defaultValue : trimmed);
+    }
 
     return new Promise((resolve) => {
-
         rl.question(
-            `${question} (${defaultValue}): `,
+            question + " (" + defaultValue + "): ",
             (answer) => {
-
                 const trimmed = answer.trim();
-
                 resolve(trimmed === "" ? defaultValue : trimmed);
-
             }
         );
-
     });
-
 }
 
 async function runSetupPanel() {
@@ -271,10 +272,15 @@ async function runSetupPanel() {
         saved = {};
     }
 
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-    });
+    const rl = process.stdin.isTTY
+        ? readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        })
+        : null;
+
+    const inputLines = rl ? [] : fs.readFileSync(0, "utf8").split(/\r?\n/);
+    const inputIndex = { value: 0 };
 
     log("=============================================");
     log("          Minecraft Player Bot - Setup");
@@ -282,30 +288,23 @@ async function runSetupPanel() {
     log("Press Enter to keep the value shown in parentheses.");
     log("");
 
-    const host = await askQuestion(rl, "Server host", saved.host || HOST);
-    const portAnswer = await askQuestion(rl, "Server port", saved.port || PORT);
-    const username = await askQuestion(rl, "Bot username", saved.username || USERNAME);
-    const version = await askQuestion(rl, "Minecraft version", saved.version || VERSION);
-    const controller = await askQuestion(rl, "Controller username", saved.controller || CONTROLLER);
+    const host = await askQuestion(rl, "Server host", saved.host || HOST, inputLines, inputIndex);
+    const portAnswer = await askQuestion(rl, "Server port", saved.port || PORT, inputLines, inputIndex);
+    const username = await askQuestion(rl, "Bot username", saved.username || USERNAME, inputLines, inputIndex);
+    const version = await askQuestion(rl, "Minecraft version", saved.version || VERSION, inputLines, inputIndex);
+    const controller = await askQuestion(rl, "Controller username", saved.controller || CONTROLLER, inputLines, inputIndex);
 
     const passwordLabel = saved.password ? "saved password" : "none";
 
-    const password = await new Promise((resolve) => {
+    const password = await askQuestion(
+        rl,
+        "Account password, for /login (" + passwordLabel + ")",
+        saved.password || "",
+        inputLines,
+        inputIndex
+    );
 
-        rl.question(
-            `Account password, for /login (${passwordLabel}): `,
-            (answer) => {
-
-                const trimmed = answer.trim();
-
-                resolve(trimmed === "" ? (saved.password || "") : trimmed);
-
-            }
-        );
-
-    });
-
-    rl.close();
+    if (rl) rl.close();
 
     // readline pauses stdin when it closes - resume it so the
     // console command listener set up later still receives input.
@@ -418,6 +417,36 @@ async function runSetupPanel() {
     const parsedApiPort = Number(process.env.AYDREAM_API_PORT || 31880);
     const API_PORT = Number.isInteger(parsedApiPort) && parsedApiPort >= 1 && parsedApiPort <= 65535 ? parsedApiPort : 31880;
     const API_HOST = "127.0.0.1";
+    const API_TOKEN_FILE = path.join(__dirname, "api-token.txt");
+    const API_ALLOWED_ORIGINS = new Set([
+        "http://127.0.0.1",
+        "http://localhost",
+        `http://127.0.0.1:${API_PORT}`,
+        `http://localhost:${API_PORT}`
+    ]);
+    let API_TOKEN = process.env.AYDREAM_API_TOKEN || "";
+
+    function loadApiToken() {
+        if (API_TOKEN.trim()) return API_TOKEN.trim();
+
+        try {
+            API_TOKEN = fs.readFileSync(API_TOKEN_FILE, "utf8").trim();
+        } catch (error) {
+            API_TOKEN = "";
+        }
+
+        if (!API_TOKEN) {
+            API_TOKEN = crypto.randomBytes(32).toString("hex");
+            fs.writeFileSync(API_TOKEN_FILE, API_TOKEN + "\n", { mode: 0o600 });
+        }
+
+        return API_TOKEN;
+    }
+
+    function isApiAuthorized(req) {
+        return req.headers.authorization === `Bearer ${API_TOKEN}`;
+    }
+
     function getApiStatus() {
         const entity = bot && bot.entity;
         const position = entity ? {
@@ -461,15 +490,29 @@ async function runSetupPanel() {
 
     function startApiServer() {
         const server = http.createServer((req, res) => {
-            const origin = req.headers.origin || "*";
-            res.setHeader("Access-Control-Allow-Origin", origin);
+            const origin = req.headers.origin || "";
+            if (origin && API_ALLOWED_ORIGINS.has(origin)) {
+                res.setHeader("Access-Control-Allow-Origin", origin);
+                res.setHeader("Vary", "Origin");
+            }
             res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
             res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
 
             if (req.method === "OPTIONS") {
+                if (origin && !API_ALLOWED_ORIGINS.has(origin)) {
+                    res.writeHead(403);
+                    res.end(JSON.stringify({ error: "origin not allowed" }));
+                    return;
+                }
                 res.writeHead(204);
                 res.end();
+                return;
+            }
+
+            if (!isApiAuthorized(req)) {
+                res.writeHead(401);
+                res.end(JSON.stringify({ error: "unauthorized" }));
                 return;
             }
 
@@ -551,8 +594,9 @@ async function runSetupPanel() {
 
         server.on("error", error => log("[API ERROR]", error.message));
         server.listen(API_PORT, API_HOST, () => {
+            loadApiToken();
             log(`[+] Aydream API: http://${API_HOST}:${API_PORT}`);
-            log("[+] Aydream API is localhost-only; no token is required");
+            log(`[+] Aydream API token is stored in ${API_TOKEN_FILE}`);
         });
     }
 
