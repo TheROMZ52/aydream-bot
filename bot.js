@@ -439,12 +439,12 @@ async function runSetupPanel() {
     let apiSecurity = null;
 
     function loadApiToken() {
-        if (API_TOKEN.trim()) return API_TOKEN.trim();
-
-        try {
-            API_TOKEN = fs.readFileSync(API_TOKEN_FILE, "utf8").trim();
-        } catch (error) {
-            API_TOKEN = "";
+        if (!API_TOKEN.trim()) {
+            try {
+                API_TOKEN = fs.readFileSync(API_TOKEN_FILE, "utf8").trim();
+            } catch (error) {
+                API_TOKEN = "";
+            }
         }
 
         if (!API_TOKEN) {
@@ -730,6 +730,12 @@ async function runSetupPanel() {
         isFarming = false;
         isCollecting = false;
         huntTarget = null;
+        autoMode = false;
+
+        if (autoModeInterval) {
+            clearInterval(autoModeInterval);
+            autoModeInterval = null;
+        }
 
         stopGuard();
 
@@ -759,6 +765,7 @@ async function runSetupPanel() {
         }
 
         lastHealth = null;
+        if (navigator) navigator.stop();
         markActivity();
         clearControlTimers();
 
@@ -3071,7 +3078,7 @@ function setSkin(value, notify) {
                 true
             );
 
-            setTimeout(
+            setControlTimer(
                 () => {
 
                     bot.clearControlStates();
@@ -3082,7 +3089,7 @@ function setSkin(value, notify) {
 
         }
 
-        setTimeout(
+        setControlTimer(
             () => {
 
                 isEscapingHazard =
@@ -5031,7 +5038,7 @@ function setSkin(value, notify) {
                     .shift()
                     .toLowerCase();
 
-            if (!bot) {
+            if (!bot || !bot.entity || !navigator) {
                 log("[!] Not connected yet.");
                 return;
             }
