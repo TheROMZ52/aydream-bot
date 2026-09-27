@@ -54,7 +54,6 @@ public class AydreamScreen extends Screen {
                 e("Follow", "!follow"),
                 e("Come", "!come"),
                 e("Wander", "!wander"),
-                e("Goto", "!goto 0 0 0"),
                 e("Autopilot On", "!autopilot on"),
                 e("Autopilot Off", "!autopilot off"),
                 e("Sprint On", "!sprint on"),
@@ -101,7 +100,7 @@ public class AydreamScreen extends Screen {
                 e("Time", "!time"),
                 e("Look", "!look"),
                 e("Scan", "!scan 16"),
-                e("Look at Controller", "!lookat TheROMZ52")
+                e("Look", "!look")
             ));
         }
 
