@@ -16,6 +16,17 @@ const startButton = document.getElementById("startButton");
 const stopButton = document.getElementById("stopButton");
 const restartButton = document.getElementById("restartButton");
 const refreshButton = document.getElementById("refreshButton");
+const saveSettings = document.getElementById("saveSettings");
+const loadSettings = document.getElementById("loadSettings");
+
+const settingFields = {
+  AYDREAM_HOST: document.getElementById("settingHost"),
+  AYDREAM_PORT: document.getElementById("settingPort"),
+  AYDREAM_USERNAME: document.getElementById("settingUsername"),
+  AYDREAM_VERSION: document.getElementById("settingVersion"),
+  AYDREAM_CONTROLLER: document.getElementById("settingController"),
+  AYDREAM_PASSWORD: document.getElementById("settingPassword")
+};
 
 let runStartedAt = null;
 
@@ -78,6 +89,8 @@ function setBusy(busy) {
   stopButton.disabled = busy;
   restartButton.disabled = busy;
   refreshButton.disabled = busy;
+  saveSettings.disabled = busy;
+  loadSettings.disabled = busy;
 }
 
 function render(data) {
@@ -149,6 +162,42 @@ async function refresh() {
   }
 }
 
+async function refreshSettings() {
+  if (!panelKey()) return;
+
+  try {
+    const data = await api("/api/status?settings=1");
+    for (const [name, field] of Object.entries(settingFields)) {
+      field.value = data.settings?.[name] ?? "";
+    }
+  } catch (error) {
+    notify("Settings: " + error.message);
+  }
+}
+
+async function saveSettingsNow() {
+  setBusy(true);
+
+  try {
+    const settings = {};
+    for (const [name, field] of Object.entries(settingFields)) {
+      settings[name] = field.value;
+    }
+
+    await api("/api/status?settings=1", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ settings })
+    });
+
+    notify("Settings saved.");
+  } catch (error) {
+    notify(error.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
 async function action(path, label) {
   setBusy(true);
 
@@ -175,6 +224,7 @@ saveKey.addEventListener("click", () => {
   localStorage.setItem("aydream_panel_key", value);
   showSetup();
   refresh();
+  refreshSettings();
 });
 
 keyInput.addEventListener("keydown", (event) => {
@@ -204,6 +254,8 @@ restartButton.addEventListener("click", async () => {
 });
 
 refreshButton.addEventListener("click", refresh);
+saveSettings.addEventListener("click", saveSettingsNow);
+loadSettings.addEventListener("click", refreshSettings);
 
 setInterval(() => {
   if (runStartedAt) {
@@ -213,3 +265,4 @@ setInterval(() => {
 
 showSetup();
 refresh();
+refreshSettings();
