@@ -138,6 +138,14 @@ public class AydreamScreen extends Screen {
             buildHomes();
             return;
         }
+        if (category.equals("automation")) {
+            buildAutomation();
+            return;
+        }
+        if (category.equals("activity")) {
+            buildActivity();
+            return;
+        }
 
         List<Entry> entries = new ArrayList<>();
 
