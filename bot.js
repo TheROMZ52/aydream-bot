@@ -58,7 +58,7 @@ function log(...args) {
 let HOST = "play.atlascraft.ir";
 let PORT = 25565;
 let USERNAME = "TheROMZ52";
-let VERSION = "1.21.1";
+let VERSION = "1.21.8";
 
 let CONTROLLER = "TheROMZ53";
 let PASSWORD = "";
@@ -3001,6 +3001,11 @@ function setSkin(value, notify) {
 
         reconnectAttempts = 0;
 
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+
         if (bot) {
 
             forceImmediateReconnect = true;
@@ -3008,6 +3013,7 @@ function setSkin(value, notify) {
             try {
                 bot.quit("Manual reconnect");
             } catch (error) {
+                forceImmediateReconnect = false;
                 connect();
             }
 
