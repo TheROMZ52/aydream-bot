@@ -164,6 +164,7 @@ function switchToProfile(name, notify) {
     CONTROLLER = profile.controller;
     PASSWORD = profile.password || "";
 
+    clearAllTasks();
     manualReconnect(notify);
 }
 
@@ -1843,8 +1844,8 @@ async function runSetupPanel() {
         return info;
     }
 
-    async function replantCropAt(position, cropInfo) {
-        if (!cropInfo || !bot.entity) return false;
+    async function replantCropAt(position, cropInfo, shouldContinue = () => true) {
+        if (!cropInfo || !bot.entity || !shouldContinue()) return false;
 
         const soil = bot.blockAt(position.offset(0, -1, 0));
         const empty = bot.blockAt(position);
@@ -1862,7 +1863,7 @@ async function runSetupPanel() {
             (item) => item.name === cropInfo.seed
         );
 
-        if (!seed) return false;
+        if (!seed || !shouldContinue()) return false;
 
         try {
             if (bot.entity.position.distanceTo(position) > 4.5) {
@@ -1870,6 +1871,8 @@ async function runSetupPanel() {
                     new goals.GoalNear(position.x, position.y, position.z, 3)
                 );
             }
+
+            if (!shouldContinue()) return false;
 
             await bot.equip(seed, "hand");
             await bot.placeBlock(soil, new Vec3(0, 1, 0));
@@ -1943,7 +1946,11 @@ async function runSetupPanel() {
 
                             if (options.replant && cropInfo) {
                                 await sleep(150);
-                                await replantCropAt(pos, cropInfo);
+                                await replantCropAt(
+                                    pos,
+                                    cropInfo,
+                                    shouldContinue
+                                );
                             }
                         } catch (error) {
                             // Already broken or changed under us, keep going.
@@ -2025,7 +2032,7 @@ async function runSetupPanel() {
                     box.maxX,
                     box.maxY,
                     box.maxZ,
-                    () => {}
+                    () => isFarming
                 );
 
                 if (!isFarming) break;
@@ -2816,9 +2823,14 @@ function setSkin(value, notify) {
         return occupied >= 34;
     }
 
+    let depositInProgress = false;
+
     async function depositInventoryIfNeeded(force = false) {
+        if (depositInProgress) return false;
         if (!bot || !bot.entity || !bot.inventory) return false;
         if (!force && !isInventoryNearFull()) return false;
+
+        depositInProgress = true;
 
         const chest = bot.findBlock({
             matching: (block) =>
