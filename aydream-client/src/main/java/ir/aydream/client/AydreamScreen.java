@@ -11,8 +11,15 @@ import java.util.List;
 
 public class AydreamScreen extends Screen {
     private final Screen parent;
-    private String category = "main";
+    private String category = "dashboard";
     private int page = 0;
+
+    private static final int PANEL = 0xD91A1D26;
+    private static final int PANEL_LIGHT = 0xE0262935;
+    private static final int GLASS = 0xB82A2E3A;
+    private static final int ACCENT = 0xFF8B5CF6;
+    private static final int TEXT = 0xFFF5F5F7;
+    private static final int MUTED = 0xFF9FA3B2;
 
     public AydreamScreen(Screen parent) {
         super(Text.literal("Aydream Client"));
@@ -22,31 +29,51 @@ public class AydreamScreen extends Screen {
     @Override
     protected void init() {
         clearChildren();
-        int left = this.width / 2 - 190;
-        int top = 55;
 
-        if (category.equals("main")) {
-            addButton(left, top, 120, 22, "Movement", () -> open("movement"));
-            addButton(left + 130, top, 120, 22, "Combat", () -> open("combat"));
-            addButton(left + 260, top, 120, 22, "Homes", () -> open("homes"));
-            addButton(left, top + 30, 120, 22, "Automation", () -> open("automation"));
-            addButton(left + 130, top + 30, 120, 22, "Inventory", () -> open("inventory"));
-            addButton(left + 260, top + 30, 120, 22, "Info", () -> open("info"));
+        if (category.equals("dashboard")) {
+            buildDashboard();
         } else {
-            buildCategory(left, top + 45);
-            addButton(left, top + 175, 120, 22, "Back", () -> open("main"));
+            buildSidebar();
+            buildCategory();
         }
 
-        addButton(this.width / 2 - 60, this.height - 35, 120, 22, "Close", this::close);
+        addButton(width - 115, height - 38, 95, 24, "Close", this::close);
     }
 
-    private void open(String value) {
-        category = value;
-        page = 0;
-        init();
+    private void buildDashboard() {
+        int panelX = width / 2 - 330;
+        int panelY = 48;
+        int panelW = 660;
+        int panelH = Math.min(260, height - 95);
+
+        addButton(panelX + 25, panelY + 78, 185, 30, "Movement", () -> open("movement"));
+        addButton(panelX + 225, panelY + 78, 185, 30, "Combat", () -> open("combat"));
+        addButton(panelX + 425, panelY + 78, 185, 30, "Homes", () -> open("homes"));
+
+        addButton(panelX + 25, panelY + 116, 185, 30, "Automation", () -> open("automation"));
+        addButton(panelX + 225, panelY + 116, 185, 30, "Inventory", () -> open("inventory"));
+        addButton(panelX + 425, panelY + 116, 185, 30, "Info", () -> open("info"));
+
+        addButton(panelX + 25, panelY + 170, 285, 30, "Quick Follow", () -> send("!follow"));
+        addButton(panelX + 325, panelY + 170, 285, 30, "Stop Everything", () -> send("!clear"));
     }
 
-    private void buildCategory(int left, int top) {
+    private void buildSidebar() {
+        int x = 28;
+        int y = 65;
+
+        String[] labels = {"Dashboard", "Movement", "Combat", "Homes", "Automation", "Inventory", "Info"};
+        String[] values = {"dashboard", "movement", "combat", "homes", "automation", "inventory", "info"};
+
+        for (int i = 0; i < labels.length; i++) {
+            String value = values[i];
+            addButton(x, y + i * 34, 150, 28, labels[i], () -> open(value));
+        }
+    }
+
+    private void buildCategory() {
+        int left = 215;
+        int top = 82;
         List<Entry> entries = new ArrayList<>();
 
         switch (category) {
@@ -66,6 +93,7 @@ public class AydreamScreen extends Screen {
             case "combat" -> entries.addAll(List.of(
                 e("Weapon", "!weapon"),
                 e("Totem", "!totem"),
+                e("Attack", "!attack"),
                 e("Status", "!status"),
                 e("Stop Combat", "!stop")
             ));
@@ -99,8 +127,7 @@ public class AydreamScreen extends Screen {
                 e("Position", "!coords"),
                 e("Time", "!time"),
                 e("Look", "!look"),
-                e("Scan", "!scan 16"),
-                e("Look", "!look")
+                e("Scan", "!scan 16")
             ));
         }
 
@@ -112,49 +139,84 @@ public class AydreamScreen extends Screen {
             Entry entry = entries.get(i);
             int col = (i - start) % 2;
             int row = (i - start) / 2;
-            addButton(left + col * 190, top + row * 27, 180, 22, entry.label, () -> send(entry.command));
+            addButton(left + col * 205, top + row * 34, 195, 28, entry.label, () -> send(entry.command));
         }
 
         if (start > 0) {
-            addButton(left, top + 140, 80, 22, "<", () -> {
+            addButton(left, top + 178, 80, 24, "<", () -> {
                 page--;
                 init();
             });
         }
 
         if (end < entries.size()) {
-            addButton(left + 100, top + 140, 80, 22, ">", () -> {
+            addButton(left + 90, top + 178, 80, 24, ">", () -> {
                 page++;
                 init();
             });
         }
     }
 
-    private void addButton(int x, int y, int width, int height, String text, Runnable action) {
+    private void open(String value) {
+        category = value;
+        page = 0;
+        init();
+    }
+
+    private void addButton(int x, int y, int w, int h, String label, Runnable action) {
         addDrawableChild(
-            ButtonWidget.builder(Text.literal(text), b -> action.run())
-                .dimensions(x, y, width, height)
+            ButtonWidget.builder(Text.literal(label), b -> action.run())
+                .dimensions(x, y, w, h)
                 .build()
         );
     }
 
     private void send(String command) {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player == null) return;
-        client.player.networkHandler.sendChatMessage(command);
+        if (client.player != null) {
+            client.player.networkHandler.sendChatMessage(command);
+        }
     }
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         renderBackground(context, mouseX, mouseY, delta);
-        context.drawCenteredTextWithShadow(textRenderer, Text.literal("Aydream Client"), width / 2, 20, 0xFFFFFF);
-        context.drawCenteredTextWithShadow(textRenderer, Text.literal("/dream • 1.21.8"), width / 2, 36, 0xAAAAAA);
+
+        int mainX = category.equals("dashboard") ? width / 2 - 330 : 195;
+        int mainY = 48;
+        int mainW = category.equals("dashboard") ? 660 : width - 225;
+        int mainH = Math.min(285, height - 88);
+
+        context.fill(mainX, mainY, mainX + mainW, mainY + mainH, PANEL);
+        context.fill(mainX + 1, mainY + 1, mainX + mainW - 1, mainY + 55, GLASS);
+
+        if (!category.equals("dashboard")) {
+            context.fill(20, 48, 185, mainY + mainH, PANEL);
+            context.fill(21, 49, 184, 86, GLASS);
+        }
+
+        context.drawText(textRenderer, Text.literal("Aydream"), mainX + 24, mainY + 18, TEXT, true);
+        context.drawText(textRenderer, Text.literal("CONTROL CENTER"), mainX + 24, mainY + 34, MUTED, false);
+
+        if (category.equals("dashboard")) {
+            context.drawText(textRenderer, Text.literal("Bot Control"), mainX + 25, mainY + 62, MUTED, false);
+            context.drawText(textRenderer, Text.literal("READY"), mainX + mainW - 75, mainY + 22, 0xFF7CFFB2, true);
+        } else {
+            context.drawText(textRenderer, Text.literal(category.toUpperCase()), mainX + 24, mainY + 62, MUTED, true);
+        }
+
+        context.drawText(textRenderer, Text.literal("/dream"), 24, height - 28, MUTED, false);
+
         super.render(context, mouseX, mouseY, delta);
     }
 
     @Override
     public boolean shouldPause() {
         return false;
+    }
+
+    private Entry e(String label, String command) {
+        return new Entry(label, command);
     }
 
     private record Entry(String label, String command) {}
