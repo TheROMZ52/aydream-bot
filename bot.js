@@ -3495,7 +3495,7 @@ function setSkin(value, notify) {
             movements.allowEntityDetection = true;
             movements.allowFreeMotion = true;
             movements.allow1by1towers = false;
-            movements.canOpenDoors = true;
+            movements.canOpenDoors = false;
             movements.dontMineUnderFallingBlock = true;
             movements.dontCreateFlow = true;
             movements.maxDropDown = 3;
@@ -3544,7 +3544,7 @@ function setSkin(value, notify) {
             diggingMovements.allowSprinting = true;
             diggingMovements.allowParkour = true;
             diggingMovements.allowEntityDetection = true;
-            diggingMovements.canOpenDoors = true;
+            diggingMovements.canOpenDoors = false;
             diggingMovements.dontMineUnderFallingBlock = true;
             diggingMovements.scaffoldingBlocks = movements.scaffoldingBlocks;
             diggingMovements.canDig = true;
