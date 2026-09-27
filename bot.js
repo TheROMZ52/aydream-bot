@@ -290,8 +290,9 @@ async function runSetupPanel() {
         }
     }
     const setupInput = createSetupInput(Boolean(rl), pipedInput, (message) => process.stdout.write(message + "\n"));
-    const inputLines = rl ? [] : pipedInput.split(/\r?\n/);
-    const inputIndex = { value: 0 };
+    const askSetup = (question, defaultValue) => rl
+        ? askQuestion(rl, question, defaultValue, [], { value: 0 })
+        : setupInput.ask(question, defaultValue);
 
     log("=============================================");
     log("          Minecraft Player Bot - Setup");
@@ -299,20 +300,17 @@ async function runSetupPanel() {
     log("Press Enter to keep the value shown in parentheses.");
     log("");
 
-    const host = await askQuestion(rl, "Server host", saved.host || HOST, inputLines, inputIndex);
-    const portAnswer = await askQuestion(rl, "Server port", saved.port || PORT, inputLines, inputIndex);
-    const username = await askQuestion(rl, "Bot username", saved.username || USERNAME, inputLines, inputIndex);
-    const version = await askQuestion(rl, "Minecraft version", saved.version || VERSION, inputLines, inputIndex);
-    const controller = await askQuestion(rl, "Controller username", saved.controller || CONTROLLER, inputLines, inputIndex);
+    const host = await askSetup("Server host", saved.host || HOST);
+    const portAnswer = await askSetup("Server port", saved.port || PORT);
+    const username = await askSetup("Bot username", saved.username || USERNAME);
+    const version = await askSetup("Minecraft version", saved.version || VERSION);
+    const controller = await askSetup("Controller username", saved.controller || CONTROLLER);
 
     const passwordLabel = saved.password ? "saved password" : "none";
 
-    const password = await askQuestion(
-        rl,
+    const password = await askSetup(
         "Account password, for /login (" + passwordLabel + ")",
-        saved.password || "",
-        inputLines,
-        inputIndex
+        saved.password || ""
     );
 
     if (rl) rl.close();
