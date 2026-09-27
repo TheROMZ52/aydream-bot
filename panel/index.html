@@ -58,6 +58,31 @@
         <a id="githubLink" class="github-link" href="#" target="_blank" rel="noreferrer">Open GitHub run</a>
       </article>
 
+      <article class="card settings-card">
+        <div class="card-head">
+          <div>
+            <p class="label">CONFIGURATION</p>
+            <h2>Aydream settings</h2>
+          </div>
+          <span class="settings-note">Saved to GitHub Actions variables</span>
+        </div>
+
+        <div class="settings-grid">
+          <label>Host<input id="settingHost" autocomplete="off" placeholder="gold.magmanode.com"></label>
+          <label>Port<input id="settingPort" inputmode="numeric" autocomplete="off" placeholder="27571"></label>
+          <label>Username<input id="settingUsername" autocomplete="off" placeholder="Bot username"></label>
+          <label>Version<input id="settingVersion" autocomplete="off" placeholder="1.21.1"></label>
+          <label>Controller<input id="settingController" autocomplete="off" placeholder="TheROMZ52"></label>
+          <label>Password<input id="settingPassword" type="password" autocomplete="new-password" placeholder="Bot password"></label>
+        </div>
+
+        <div class="settings-actions">
+          <button id="loadSettings" class="secondary">Reload</button>
+          <button id="saveSettings" class="primary">Save settings</button>
+        </div>
+        <p class="settings-warning">These values are stored as GitHub Actions variables. Do not use this panel for highly sensitive passwords.</p>
+      </article>
+
       <article class="card logs-card">
         <div class="card-head">
           <div>
