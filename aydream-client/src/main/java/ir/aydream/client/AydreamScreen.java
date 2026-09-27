@@ -23,7 +23,7 @@ public class AydreamScreen extends Screen {
     private int page = 0;
     private String apiBaseUrl = "http://127.0.0.1:31880";
     private net.minecraft.client.gui.widget.TextFieldWidget urlField;
-    private String settingsMessage = "";
+    private volatile String settingsMessage = "";
     private final HttpClient apiClient = HttpClient.newHttpClient();
     private volatile boolean apiOnline = false;
     private volatile String botTask = "offline";
@@ -71,7 +71,6 @@ public class AydreamScreen extends Screen {
         int panelX = width / 2 - 330;
         int panelY = 48;
         int panelW = 660;
-        int panelH = Math.min(260, height - 95);
 
         addButton(panelX + 25, panelY + 78, 185, 30, "Movement", () -> open("movement"));
         addButton(panelX + 225, panelY + 78, 185, 30, "Combat", () -> open("combat"));
@@ -85,7 +84,7 @@ public class AydreamScreen extends Screen {
         addButton(panelX + 225, panelY + 170, 185, 30, "Stop Everything", () -> apiAction("!clear"));
         addButton(panelX + 425, panelY + 170, 185, 30, "Refresh", this::forceRefresh);
         addButton(panelX + 25, panelY + 208, 185, 30, "Settings", () -> open("settings"));
-        addButton(panelX + 225, panelY + 208, 185, 30, "Info", () -> open("info"));
+        addButton(panelX + 225, panelY + 208, 185, 30, "Players", () -> open("players"));
         if (!nearbyPlayers.isEmpty()) {
             String player = extractPlayerName(nearbyPlayers.get(0));
             addButton(panelX + 425, panelY + 208, 185, 30, "Follow " + player, () -> apiAction("!follow " + player));
@@ -105,13 +104,14 @@ public class AydreamScreen extends Screen {
     private void buildSidebar() {
         int x = 28;
         int y = 65;
+        int spacing = height < 430 ? 29 : 34;
 
         String[] labels = {"Dashboard", "Players", "Movement", "Combat", "Homes", "Automation", "Activity", "Inventory", "Info", "Settings"};
         String[] values = {"dashboard", "players", "movement", "combat", "homes", "automation", "activity", "inventory", "info", "settings"};
 
         for (int i = 0; i < labels.length; i++) {
             String value = values[i];
-            addButton(x, y + i * 34, 150, 28, labels[i], () -> open(value));
+            addButton(x, y + i * spacing, 150, 28, labels[i], () -> open(value));
         }
     }
 
@@ -251,7 +251,6 @@ public class AydreamScreen extends Screen {
             int x = left + col * 215;
             int y = top + row * 64;
 
-            contextText = display;
             addButton(x, y, 200, 28, player, () -> openPlayer(player));
             addButton(x, y + 32, 62, 24, "Follow", () -> apiAction("!follow " + player));
             addButton(x + 68, y + 32, 62, 24, "Come", () -> apiAction("!come " + player));
@@ -366,10 +365,11 @@ public class AydreamScreen extends Screen {
     }
 
     private void refreshInventory() {
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(apiBaseUrl + "/api/inventory"))
-            .GET()
-            .build();
+        HttpRequest request = buildRequest("/api/inventory", "GET", null);
+        if (request == null) {
+            inventoryItems = List.of();
+            return;
+        }
         apiClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
             if (response.statusCode() != 200) return;
             String body = response.body();
@@ -408,7 +408,7 @@ public class AydreamScreen extends Screen {
         int top = 98;
         int w = Math.min(430, width - left - 40);
 
-        urlField = new TextFieldWidget(textRenderer, left, top, w, 22, Text.literal("Bot API URL"));
+        urlField = new net.minecraft.client.gui.widget.TextFieldWidget(textRenderer, left, top, w, 22, Text.literal("Bot API URL"));
         urlField.setMaxLength(200);
         urlField.setText(apiBaseUrl);
         addDrawableChild(urlField);
@@ -426,6 +426,40 @@ public class AydreamScreen extends Screen {
         return MinecraftClient.getInstance().runDirectory.toPath().resolve("config").resolve("aydream-client.properties");
     }
 
+    private String normalizeApiUrl(String value) {
+        if (value == null || value.isBlank()) return "http://127.0.0.1:31880";
+        try {
+            URI uri = URI.create(value.trim());
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            if (!"http".equalsIgnoreCase(scheme)) return "http://127.0.0.1:31880";
+            if (!"127.0.0.1".equals(host) && !"localhost".equalsIgnoreCase(host)) return "http://127.0.0.1:31880";
+            if (uri.getPath() != null && !uri.getPath().isEmpty() && !"/".equals(uri.getPath())) return "http://127.0.0.1:31880";
+            int port = uri.getPort();
+            if (port < 1 || port > 65535) return "http://127.0.0.1:31880";
+            return "http://" + host + ":" + port;
+        } catch (Exception ignored) {
+            return "http://127.0.0.1:31880";
+        }
+    }
+
+    private HttpRequest buildRequest(String path, String method, String body) {
+        try {
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(apiBaseUrl + path));
+            if ("POST".equals(method)) {
+                builder.header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body == null ? "" : body));
+            } else {
+                builder.GET();
+            }
+            return builder.build();
+        } catch (Exception error) {
+            apiOnline = false;
+            return null;
+        }
+    }
+
     private void loadConfig() {
         try {
             Path path = configPath();
@@ -434,15 +468,14 @@ public class AydreamScreen extends Screen {
             try (var input = Files.newInputStream(path)) {
                 properties.load(input);
             }
-            apiBaseUrl = properties.getProperty("api.url", "http://127.0.0.1:31880").trim();
+            apiBaseUrl = normalizeApiUrl(properties.getProperty("api.url", "http://127.0.0.1:31880"));
         } catch (Exception ignored) {
             apiBaseUrl = "http://127.0.0.1:31880";
         }
     }
 
     private void saveConfig() {
-        if (urlField != null) apiBaseUrl = urlField.getText().trim();
-        if (apiBaseUrl.isBlank()) apiBaseUrl = "http://127.0.0.1:31880";
+        if (urlField != null) apiBaseUrl = normalizeApiUrl(urlField.getText());
         try {
             Path path = configPath();
             Files.createDirectories(path.getParent());
@@ -485,11 +518,11 @@ public class AydreamScreen extends Screen {
 
     private void apiAction(String command) {
         String json = "{\"command\":\"" + command.replace("\\", "\\\\").replace("\"", "\\\"") + "\"}";
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(apiBaseUrl + "/api/action"))
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(json))
-            .build();
+        HttpRequest request = buildRequest("/api/action", "POST", json);
+        if (request == null) {
+            actionMessage = "Invalid API URL";
+            return;
+        }
         apiClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
             actionMessage = response.statusCode() >= 200 && response.statusCode() < 300
                 ? "Sent: " + command
@@ -510,10 +543,8 @@ public class AydreamScreen extends Screen {
         long now = System.currentTimeMillis();
         if (now < nextRefresh) return;
         nextRefresh = now + 1000L;
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(apiBaseUrl + "/api/status"))
-            .GET()
-            .build();
+        HttpRequest request = buildRequest("/api/status", "GET", null);
+        if (request == null) return;
         apiClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
             if (response.statusCode() != 200) {
                 apiOnline = false;
@@ -558,7 +589,7 @@ public class AydreamScreen extends Screen {
         while (cursor < section.length()) {
             int nameStart = section.indexOf("\"name\":\"", cursor);
             if (nameStart < 0) break;
-            nameStart += 8;
+            nameStart += 9;
             int nameEnd = section.indexOf("\"", nameStart);
             if (nameEnd < 0) break;
             String name = section.substring(nameStart, nameEnd);
@@ -619,13 +650,6 @@ public class AydreamScreen extends Screen {
         int end = start;
         while (end < json.length() && ",}\n".indexOf(json.charAt(end)) < 0) end++;
         return json.substring(start, end).trim();
-    }
-
-    private void send(String command) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player != null) {
-            client.player.networkHandler.sendChatMessage(command);
-        }
     }
 
     @Override
