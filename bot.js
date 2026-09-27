@@ -310,7 +310,7 @@ async function runSetupPanel() {
     let backgroundLoopsStarted = false;
     const controlTimers = new Set();
     const API_PORT = Number(process.env.AYDREAM_API_PORT || 31880);
-    const API_HOST = process.env.AYDREAM_API_HOST || "0.0.0.0";
+    const API_HOST = process.env.AYDREAM_API_HOST || "127.0.0.1";
     const API_TOKEN_FILE = path.join(__dirname, "api-token.txt");
     let API_TOKEN = process.env.AYDREAM_API_TOKEN || "";
 
