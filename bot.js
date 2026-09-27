@@ -9,6 +9,8 @@ const { Vec3 } = require("vec3");
 const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
+const http = require("http");
+const crypto = require("crypto");
 
 // ============================================
 // Simple logger: prints to console AND appends
@@ -307,6 +309,153 @@ async function runSetupPanel() {
     let reconnectTimer = null;
     let backgroundLoopsStarted = false;
     const controlTimers = new Set();
+    const API_PORT = Number(process.env.AYDREAM_API_PORT || 31880);
+    const API_HOST = process.env.AYDREAM_API_HOST || "0.0.0.0";
+    const API_TOKEN_FILE = path.join(__dirname, "api-token.txt");
+    let API_TOKEN = process.env.AYDREAM_API_TOKEN || "";
+
+    function loadApiToken() {
+        if (API_TOKEN) return;
+        try {
+            API_TOKEN = fs.readFileSync(API_TOKEN_FILE, "utf8").trim();
+        } catch (error) {
+            API_TOKEN = crypto.randomBytes(24).toString("hex");
+            try {
+                fs.writeFileSync(API_TOKEN_FILE, API_TOKEN, { mode: 0o600 });
+            } catch (writeError) {
+                log("[ERROR] Could not save API token:", writeError.message);
+            }
+        }
+    }
+
+    function getApiStatus() {
+        const entity = bot && bot.entity;
+        const position = entity ? {
+            x: Number(entity.position.x.toFixed(2)),
+            y: Number(entity.position.y.toFixed(2)),
+            z: Number(entity.position.z.toFixed(2))
+        } : null;
+
+        let task = "idle";
+        if (isFighting) task = "fighting";
+        else if (isFleeing) task = "fleeing";
+        else if (isMining) task = "mining";
+        else if (isFarming) task = "farming";
+        else if (isCollecting) task = "collecting";
+        else if (isGuarding) task = "guarding";
+        else if (huntTarget) task = "hunting";
+        else if (autoMode) task = "autopilot";
+
+        return {
+            online: Boolean(bot && bot.entity),
+            username: bot?.username || USERNAME,
+            server: { host: HOST, port: PORT },
+            version: bot?.version || VERSION,
+            health: bot?.health ?? null,
+            food: bot?.food ?? null,
+            position,
+            task,
+            busy: isBusy(),
+            lastActivity,
+            players: bot?.players ? Object.values(bot.players)
+                .filter(player => player?.username)
+                .map(player => ({
+                    name: player.username,
+                    distance: player.entity && entity
+                        ? Number(entity.position.distanceTo(player.entity.position).toFixed(1))
+                        : null
+                })) : [],
+            homes: Object.fromEntries(homes)
+        };
+    }
+
+    function startApiServer() {
+        loadApiToken();
+
+        const server = http.createServer((req, res) => {
+            const origin = req.headers.origin || "*";
+            res.setHeader("Access-Control-Allow-Origin", origin);
+            res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+            if (req.method === "OPTIONS") {
+                res.writeHead(204);
+                res.end();
+                return;
+            }
+
+            const auth = req.headers.authorization || "";
+            const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+            if (!API_TOKEN || token !== API_TOKEN) {
+                res.writeHead(401);
+                res.end(JSON.stringify({ error: "unauthorized" }));
+                return;
+            }
+
+            if (req.method === "GET" && req.url === "/api/status") {
+                res.writeHead(200);
+                res.end(JSON.stringify(getApiStatus()));
+                return;
+            }
+
+            if (req.method === "GET" && req.url === "/api/players") {
+                res.writeHead(200);
+                res.end(JSON.stringify(getApiStatus().players));
+                return;
+            }
+
+            if (req.method === "GET" && req.url === "/api/homes") {
+                res.writeHead(200);
+                res.end(JSON.stringify(Object.fromEntries(homes)));
+                return;
+            }
+
+            if (req.method === "POST" && req.url === "/api/action") {
+                let body = "";
+                req.on("data", chunk => {
+                    body += chunk;
+                    if (body.length > 10000) req.destroy();
+                });
+                req.on("end", () => {
+                    try {
+                        const data = JSON.parse(body || "{}");
+                        const command = typeof data.command === "string" ? data.command.trim() : "";
+                        if (!command || !bot) {
+                            res.writeHead(400);
+                            res.end(JSON.stringify({ error: "invalid command" }));
+                            return;
+                        }
+
+                        if (!command.startsWith("!")) {
+                            res.writeHead(400);
+                            res.end(JSON.stringify({ error: "only bot commands are allowed" }));
+                            return;
+                        }
+
+                        bot.chat(command);
+                        markActivity();
+                        res.writeHead(200);
+                        res.end(JSON.stringify({ ok: true }));
+                    } catch (error) {
+                        res.writeHead(400);
+                        res.end(JSON.stringify({ error: "invalid json" }));
+                    }
+                });
+                return;
+            }
+
+            res.writeHead(404);
+            res.end(JSON.stringify({ error: "not found" }));
+        });
+
+        server.on("error", error => log("[API ERROR]", error.message));
+        server.listen(API_PORT, API_HOST, () => {
+            log(`[+] Aydream API: http://${API_HOST}:${API_PORT}`);
+            log("[+] Aydream API token saved in api-token.txt");
+        });
+    }
+
     const HOMES_FILE = path.join(__dirname, "homes.json");
 
     function setControlTimer(callback, ms) {
@@ -4439,6 +4588,8 @@ function setSkin(value, notify) {
     VERSION = setupConfig.version;
     CONTROLLER = setupConfig.controller;
     PASSWORD = setupConfig.password || "";
+
+    startApiServer();
 
     // Kick off the first connection.
     connect();
