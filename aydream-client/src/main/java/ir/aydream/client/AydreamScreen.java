@@ -80,8 +80,22 @@ public class AydreamScreen extends Screen {
         addButton(panelX + 25, panelY + 170, 185, 30, "Quick Follow", () -> apiAction("!follow"));
         addButton(panelX + 225, panelY + 170, 185, 30, "Stop Everything", () -> apiAction("!clear"));
         addButton(panelX + 425, panelY + 170, 185, 30, "Refresh", this::forceRefresh);
-        addButton(panelX + 25, panelY + 208, 285, 30, "Settings", () -> open("settings"));
-        addButton(panelX + 325, panelY + 208, 285, 30, "Info", () -> open("info"));
+        addButton(panelX + 25, panelY + 208, 185, 30, "Settings", () -> open("settings"));
+        addButton(panelX + 225, panelY + 208, 185, 30, "Info", () -> open("info"));
+        if (!nearbyPlayers.isEmpty()) {
+            String player = extractPlayerName(nearbyPlayers.get(0));
+            addButton(panelX + 425, panelY + 208, 185, 30, "Follow " + player, () -> apiAction("!follow " + player));
+        } else {
+            addButton(panelX + 425, panelY + 208, 185, 30, "No Players", () -> {});
+        }
+
+        if (!savedHomes.isEmpty()) {
+            int homeY = panelY + 246;
+            for (int i = 0; i < Math.min(3, savedHomes.size()); i++) {
+                String home = savedHomes.get(i);
+                addButton(panelX + 25 + i * 200, homeY, 185, 26, "Go: " + home, () -> apiAction("!home " + home));
+            }
+        }
     }
 
     private void buildSidebar() {
@@ -307,8 +321,16 @@ public class AydreamScreen extends Screen {
             String body = response.body();
             apiOnline = true;
             settingsMessage = "Connected";
-            nearbyPlayers = parsePlayers(body);
-            savedHomes = parseHomeNames(body);
+            List<String> newPlayers = parsePlayers(body);
+            List<String> newHomes = parseHomeNames(body);
+            boolean changed = !newPlayers.equals(nearbyPlayers) || !newHomes.equals(savedHomes);
+            nearbyPlayers = newPlayers;
+            savedHomes = newHomes;
+            if (changed && category.equals("dashboard")) {
+                MinecraftClient.getInstance().execute(() -> {
+                    if (MinecraftClient.getInstance().currentScreen == this) init();
+                });
+            }
             botHealth = value(body, "health");
             botFood = value(body, "food");
             botTask = value(body, "task");
@@ -373,6 +395,11 @@ public class AydreamScreen extends Screen {
             cursor = keyEnd + 1;
         }
         return result;
+    }
+
+    private String extractPlayerName(String value) {
+        int separator = value.indexOf("  ");
+        return separator > 0 ? value.substring(0, separator) : value;
     }
 
     private String value(String json, String key) {
