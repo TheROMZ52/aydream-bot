@@ -15,17 +15,19 @@ async function getSettings() {
   return Object.fromEntries(SETTINGS.map((name) => [name, map[name] ?? ""]));
 }
 
-async function saveSetting(name, value, exists) {
+async function saveSetting(name, value) {
   const body = JSON.stringify({ name, value: String(value ?? "") });
   const path = "/repos/" + REPO + "/actions/variables/" + encodeURIComponent(name);
 
-  if (exists) {
+  try {
     await github(path, {
       method: "PATCH",
       body,
       headers: { "Content-Type": "application/json" }
     });
-  } else {
+  } catch (error) {
+    if (error.status !== 404) throw error;
+
     await github("/repos/" + REPO + "/actions/variables", {
       method: "POST",
       body,
@@ -45,20 +47,28 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === "PUT" && req.query?.settings === "1") {
-      const current = await getSettings();
-      const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+      const body = typeof req.body === "string"
+        ? JSON.parse(req.body || "{}")
+        : (req.body || {});
       const settings = body.settings || {};
 
-      const data = await github("/repos/" + REPO + "/actions/variables?per_page=100");
-      const existing = new Set((data.variables || []).map((item) => item.name));
+      if (!settings || typeof settings !== "object") {
+        return res.status(400).json({ error: "Invalid settings payload." });
+      }
 
       for (const name of SETTINGS) {
         if (Object.prototype.hasOwnProperty.call(settings, name)) {
-          await saveSetting(name, settings[name], existing.has(name));
+          await saveSetting(name, settings[name]);
         }
       }
 
-      return res.status(200).json({ ok: true, message: "Settings saved.", settings: { ...current, ...settings } });
+      const saved = await getSettings();
+
+      return res.status(200).json({
+        ok: true,
+        message: "Settings saved.",
+        settings: saved
+      });
     }
 
     if (req.method !== "GET") {
