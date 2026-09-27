@@ -16,7 +16,7 @@ test("piped setup consumes every line in order", async () => {
 test("piped setup falls back to defaults for missing or empty lines", async () => {
     const input = createSetupInput(false, "\n\n");
     assert.equal(await input.ask("host", "default-host"), "default-host");
-    assert.equal(await input.ask("port", "25565"), "default-port");
+    assert.equal(await input.ask("port", "25565"), "25565");
     assert.equal(await input.ask("username", "Bot"), "Bot");
 });
 
