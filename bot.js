@@ -272,6 +272,9 @@ async function runSetupPanel() {
     let diggingMovements = null;
 
     let lastHealth = null;
+    const homes = new Map();
+    let autoMode = false;
+    let autoModeInterval = null;
     let lastActivity = Date.now();
 
     let isEscapingHazard = false;
@@ -3664,6 +3667,278 @@ function setSkin(value, notify) {
                         "Stopped."
                     );
 
+                    return;
+                }
+
+                if (command === "help") {
+                    bot.chat("Commands: help, players, near, health, sethome, home, delhome, equip, armor, drop, hand, jump, sprint, sneak, move, face, distance, where, watch, autopilot, clear, stop");
+                    return;
+                }
+
+                if (command === "players") {
+                    const names = Object.keys(bot.players).filter((name) => name !== bot.username);
+                    bot.chat(names.length ? "Players: " + names.join(", ") : "No other players online.");
+                    return;
+                }
+
+                if (command === "near") {
+                    const radius = Math.max(1, Number(parts[0]) || 16);
+                    const list = Object.values(bot.players)
+                        .filter((player) => player.username !== bot.username && player.entity)
+                        .map((player) => ({
+                            name: player.username,
+                            distance: bot.entity.position.distanceTo(player.entity.position)
+                        }))
+                        .filter((player) => player.distance <= radius)
+                        .sort((a, b) => a.distance - b.distance);
+
+                    bot.chat(list.length
+                        ? list.map((player) => player.name + " " + player.distance.toFixed(1) + "m").join(" | ")
+                        : "No players nearby.");
+                    return;
+                }
+
+                if (command === "health") {
+                    bot.chat("Health: " + (bot.health ?? 0).toFixed(1) + " | Food: " + (bot.food ?? 0));
+                    return;
+                }
+
+                if (command === "sethome") {
+                    if (!bot.entity) return;
+                    const name = parts[0] || "home";
+                    const p = bot.entity.position;
+                    homes.set(name, { x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z) });
+                    bot.chat("Home '" + name + "' saved.");
+                    return;
+                }
+
+                if (command === "home") {
+                    const name = parts[0] || "home";
+                    const home = homes.get(name);
+                    if (!home) {
+                        bot.chat("Home '" + name + "' not found.");
+                        return;
+                    }
+                    bot.pathfinder.setGoal(new goals.GoalNear(home.x, home.y, home.z, 1));
+                    bot.chat("Going to home '" + name + "'.");
+                    return;
+                }
+
+                if (command === "delhome") {
+                    const name = parts[0] || "home";
+                    if (homes.delete(name)) {
+                        bot.chat("Home '" + name + "' deleted.");
+                    } else {
+                        bot.chat("Home '" + name + "' not found.");
+                    }
+                    return;
+                }
+
+                if (command === "equip") {
+                    const itemName = parts[0];
+                    const destination = parts[1] || "hand";
+                    if (!itemName) {
+                        bot.chat("Usage: !equip <item> [hand|off-hand|head|torso|legs|feet]");
+                        return;
+                    }
+                    const item = bot.inventory.items().find((stack) =>
+                        stack.name === itemName || stack.name.includes(itemName)
+                    );
+                    if (!item) {
+                        bot.chat("Item not found: " + itemName);
+                        return;
+                    }
+                    try {
+                        await bot.equip(item, destination);
+                        bot.chat("Equipped " + item.name + " in " + destination + ".");
+                    } catch (error) {
+                        bot.chat("Equip failed: " + error.message);
+                    }
+                    return;
+                }
+
+                if (command === "armor") {
+                    const slots = ["head", "torso", "legs", "feet"];
+                    let equipped = 0;
+                    for (const destination of slots) {
+                        const candidates = bot.inventory.items().filter((item) =>
+                            (destination === "head" && item.name.endsWith("_helmet")) ||
+                            (destination === "torso" && item.name.endsWith("_chestplate")) ||
+                            (destination === "legs" && item.name.endsWith("_leggings")) ||
+                            (destination === "feet" && item.name.endsWith("_boots"))
+                        );
+                        if (!candidates.length) continue;
+                        candidates.sort((a, b) => b.name.length - a.name.length);
+                        try {
+                            await bot.equip(candidates[0], destination);
+                            equipped++;
+                        } catch {}
+                    }
+                    bot.chat("Armor equipped: " + equipped + "/4.");
+                    return;
+                }
+
+                if (command === "drop") {
+                    const itemName = parts[0];
+                    const amount = Math.max(1, Number(parts[1]) || 9999);
+                    if (!itemName) {
+                        bot.chat("Usage: !drop <item> [amount]");
+                        return;
+                    }
+                    let remaining = amount;
+                    try {
+                        for (const item of bot.inventory.items().filter((stack) =>
+                            stack.name === itemName || stack.name.includes(itemName)
+                        )) {
+                            if (remaining <= 0) break;
+                            const count = Math.min(item.count, remaining);
+                            await bot.toss(item.type, item.metadata, count);
+                            remaining -= count;
+                        }
+                        bot.chat("Dropped " + (amount - remaining) + " " + itemName + ".");
+                    } catch (error) {
+                        bot.chat("Drop failed: " + error.message);
+                    }
+                    return;
+                }
+
+                if (command === "hand") {
+                    const item = bot.heldItem;
+                    bot.chat(item ? "Holding " + item.name + " x" + item.count : "Hand is empty.");
+                    return;
+                }
+
+                if (command === "jump") {
+                    const seconds = Math.min(10, Math.max(0.2, Number(parts[0]) || 1));
+                    bot.setControlState("jump", true);
+                    setTimeout(() => bot.setControlState("jump", false), seconds * 1000);
+                    bot.chat("Jumping.");
+                    return;
+                }
+
+                if (command === "sprint") {
+                    const state = (parts[0] || "on").toLowerCase();
+                    bot.setControlState("sprint", state !== "off");
+                    bot.chat("Sprint " + (state === "off" ? "off." : "on."));
+                    return;
+                }
+
+                if (command === "sneak") {
+                    const state = (parts[0] || "on").toLowerCase();
+                    bot.setControlState("sneak", state !== "off");
+                    bot.chat("Sneak " + (state === "off" ? "off." : "on."));
+                    return;
+                }
+
+                if (command === "move") {
+                    const direction = (parts[0] || "").toLowerCase();
+                    const seconds = Math.min(30, Math.max(0.1, Number(parts[1]) || 2));
+                    const valid = ["forward", "back", "left", "right"];
+                    if (!valid.includes(direction)) {
+                        bot.chat("Usage: !move <forward|back|left|right> [seconds]");
+                        return;
+                    }
+                    bot.setControlState(direction, true);
+                    setTimeout(() => bot.setControlState(direction, false), seconds * 1000);
+                    bot.chat("Moving " + direction + " for " + seconds + "s.");
+                    return;
+                }
+
+                if (command === "face") {
+                    if (parts.length !== 3 || parts.some((p) => Number.isNaN(Number(p)))) {
+                        bot.chat("Usage: !face <x> <y> <z>");
+                        return;
+                    }
+                    const [x, y, z] = parts.map(Number);
+                    try {
+                        await bot.lookAt(new Vec3(x, y, z), true);
+                        bot.chat("Facing " + x + " " + y + " " + z + ".");
+                    } catch (error) {
+                        bot.chat("Look failed: " + error.message);
+                    }
+                    return;
+                }
+
+                if (command === "distance") {
+                    const target = parts[0];
+                    const player = target ? bot.players[target] : null;
+                    if (!player || !player.entity) {
+                        bot.chat("Player not found: " + (target || ""));
+                        return;
+                    }
+                    bot.chat(target + " is " + bot.entity.position.distanceTo(player.entity.position).toFixed(1) + "m away.");
+                    return;
+                }
+
+                if (command === "where") {
+                    const target = parts[0];
+                    const player = target ? bot.players[target] : null;
+                    if (!player || !player.entity) {
+                        bot.chat("Player not found: " + (target || ""));
+                        return;
+                    }
+                    const p = player.entity.position;
+                    bot.chat(target + ": " + p.x.toFixed(1) + " " + p.y.toFixed(1) + " " + p.z.toFixed(1));
+                    return;
+                }
+
+                if (command === "watch") {
+                    const target = parts[0];
+                    const player = target ? bot.players[target] : null;
+                    if (!player || !player.entity) {
+                        bot.chat("Player not found: " + (target || ""));
+                        return;
+                    }
+                    bot.pathfinder.setGoal(new goals.GoalFollow(player.entity, 2), true);
+                    bot.chat("Watching " + target + ".");
+                    return;
+                }
+
+                if (command === "autopilot") {
+                    const state = (parts[0] || "on").toLowerCase();
+                    if (state === "off") {
+                        autoMode = false;
+                        if (autoModeInterval) {
+                            clearInterval(autoModeInterval);
+                            autoModeInterval = null;
+                        }
+                        bot.chat("Autopilot off.");
+                        return;
+                    }
+
+                    autoMode = true;
+                    if (!autoModeInterval) {
+                        autoModeInterval = setInterval(async () => {
+                            if (!autoMode || !bot || !bot.entity || isBusy()) return;
+                            if (bot.health <= TOTEM_HEALTH_THRESHOLD) return;
+                            if (bot.food <= 12 && bot.autoEat && typeof bot.autoEat.eat === "function") {
+                                try {
+                                    await bot.autoEat.eat();
+                                    return;
+                                } catch {}
+                            }
+                            const p = bot.entity.position;
+                            const x = Math.floor(p.x) + Math.floor(Math.random() * 25) - 12;
+                            const z = Math.floor(p.z) + Math.floor(Math.random() * 25) - 12;
+                            bot.pathfinder.setGoal(new goals.GoalNear(x, Math.floor(p.y), z, 1));
+                        }, 12000);
+                    }
+                    bot.chat("Autopilot on.");
+                    return;
+                }
+
+                if (command === "clear") {
+                    stopFighting();
+                    stopFleeing();
+                    stopHunting();
+                    stopGuard();
+                    isEscapingHazard = false;
+                    isMining = false;
+                    isFarming = false;
+                    isCollecting = false;
+                    bot.pathfinder.setGoal(null);
+                    bot.clearControlStates();
+                    bot.chat("All tasks cleared.");
                     return;
                 }
 
