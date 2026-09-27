@@ -10,7 +10,6 @@ const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
 const http = require("http");
-const crypto = require("crypto");
 
 // ============================================
 // Simple logger: prints to console AND appends
@@ -311,23 +310,6 @@ async function runSetupPanel() {
     const controlTimers = new Set();
     const API_PORT = Number(process.env.AYDREAM_API_PORT || 31880);
     const API_HOST = process.env.AYDREAM_API_HOST || "127.0.0.1";
-    const API_TOKEN_FILE = path.join(__dirname, "api-token.txt");
-    let API_TOKEN = process.env.AYDREAM_API_TOKEN || "";
-
-    function loadApiToken() {
-        if (API_TOKEN) return;
-        try {
-            API_TOKEN = fs.readFileSync(API_TOKEN_FILE, "utf8").trim();
-        } catch (error) {
-            API_TOKEN = crypto.randomBytes(24).toString("hex");
-            try {
-                fs.writeFileSync(API_TOKEN_FILE, API_TOKEN, { mode: 0o600 });
-            } catch (writeError) {
-                log("[ERROR] Could not save API token:", writeError.message);
-            }
-        }
-    }
-
     function getApiStatus() {
         const entity = bot && bot.entity;
         const position = entity ? {
@@ -370,8 +352,6 @@ async function runSetupPanel() {
     }
 
     function startApiServer() {
-        loadApiToken();
-
         const server = http.createServer((req, res) => {
             const origin = req.headers.origin || "*";
             res.setHeader("Access-Control-Allow-Origin", origin);
@@ -382,14 +362,6 @@ async function runSetupPanel() {
             if (req.method === "OPTIONS") {
                 res.writeHead(204);
                 res.end();
-                return;
-            }
-
-            const auth = req.headers.authorization || "";
-            const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-            if (!API_TOKEN || token !== API_TOKEN) {
-                res.writeHead(401);
-                res.end(JSON.stringify({ error: "unauthorized" }));
                 return;
             }
 
@@ -452,7 +424,7 @@ async function runSetupPanel() {
         server.on("error", error => log("[API ERROR]", error.message));
         server.listen(API_PORT, API_HOST, () => {
             log(`[+] Aydream API: http://${API_HOST}:${API_PORT}`);
-            log("[+] Aydream API token saved in api-token.txt");
+            log("[+] Aydream API is localhost-only; no token is required");
         });
     }
 
