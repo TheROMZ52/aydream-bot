@@ -22,7 +22,9 @@ public class AydreamScreen extends Screen {
     private String category = "dashboard";
     private int page = 0;
     private String apiBaseUrl = "http://127.0.0.1:31880";
+    private String apiToken = "";
     private net.minecraft.client.gui.widget.TextFieldWidget urlField;
+    private net.minecraft.client.gui.widget.TextFieldWidget tokenField;
     private volatile String settingsMessage = "";
     private final HttpClient apiClient = HttpClient.newHttpClient();
     private volatile boolean apiOnline = false;
@@ -413,11 +415,16 @@ public class AydreamScreen extends Screen {
         urlField.setText(apiBaseUrl);
         addDrawableChild(urlField);
 
-        addButton(left, top + 58, 130, 28, "Save", this::saveConfig);
-        addButton(left + 140, top + 58, 130, 28, "Test", this::testConnection);
-        addButton(left + 280, top + 58, 130, 28, "Reset", this::resetConfig);
+        tokenField = new net.minecraft.client.gui.widget.TextFieldWidget(textRenderer, left, top + 30, w, 22, Text.literal("API Token"));
+        tokenField.setMaxLength(200);
+        tokenField.setText(apiToken);
+        addDrawableChild(tokenField);
 
-        contextText = "Localhost only. No API token is required.";
+        addButton(left, top + 70, 130, 28, "Save", this::saveConfig);
+        addButton(left + 140, top + 70, 130, 28, "Test", this::testConnection);
+        addButton(left + 280, top + 70, 130, 28, "Reset", this::resetConfig);
+
+        contextText = "Use the token from api-token.txt.";
     }
 
     private String contextText = "";
@@ -447,6 +454,11 @@ public class AydreamScreen extends Screen {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(apiBaseUrl + path));
+            if (apiToken.isBlank()) {
+                apiOnline = false;
+                return null;
+            }
+            builder.header("Authorization", "Bearer " + apiToken);
             if ("POST".equals(method)) {
                 builder.header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body == null ? "" : body));
@@ -469,6 +481,7 @@ public class AydreamScreen extends Screen {
                 properties.load(input);
             }
             apiBaseUrl = normalizeApiUrl(properties.getProperty("api.url", "http://127.0.0.1:31880"));
+            apiToken = properties.getProperty("api.token", "");
         } catch (Exception ignored) {
             apiBaseUrl = "http://127.0.0.1:31880";
         }
@@ -476,11 +489,13 @@ public class AydreamScreen extends Screen {
 
     private void saveConfig() {
         if (urlField != null) apiBaseUrl = normalizeApiUrl(urlField.getText());
+        if (tokenField != null) apiToken = tokenField.getText().trim();
         try {
             Path path = configPath();
             Files.createDirectories(path.getParent());
             java.util.Properties properties = new java.util.Properties();
             properties.setProperty("api.url", apiBaseUrl);
+            properties.setProperty("api.token", apiToken);
             try (var output = Files.newOutputStream(path, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
                 properties.store(output, "Aydream Client");
             }
@@ -492,6 +507,7 @@ public class AydreamScreen extends Screen {
 
     private void resetConfig() {
         apiBaseUrl = "http://127.0.0.1:31880";
+        apiToken = "";
         settingsMessage = "Reset";
         init();
     }
