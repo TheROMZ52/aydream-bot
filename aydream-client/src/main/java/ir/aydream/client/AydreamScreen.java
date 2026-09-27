@@ -355,9 +355,9 @@ public class AydreamScreen extends Screen {
         List<String> result = new ArrayList<>();
         int start = json.indexOf("\"homes\":{");
         if (start < 0) return result;
-        start += 9;
-        int end = json.indexOf("}", start);
-        if (end < 0) end = json.length();
+        start += 8;
+        int end = json.lastIndexOf("}}");
+        if (end < start) end = json.length();
         String section = json.substring(start, end);
         int cursor = 0;
         while (cursor < section.length()) {
@@ -365,11 +365,12 @@ public class AydreamScreen extends Screen {
             if (keyStart < 0) break;
             int keyEnd = section.indexOf("\"", keyStart + 1);
             if (keyEnd < 0) break;
-            result.add(section.substring(keyStart + 1, keyEnd));
+            int objectStart = keyEnd + 1;
+            while (objectStart < section.length() && Character.isWhitespace(section.charAt(objectStart))) objectStart++;
+            if (objectStart + 1 < section.length() && section.charAt(objectStart) == ':' && section.charAt(objectStart + 1) == '{') {
+                result.add(section.substring(keyStart + 1, keyEnd));
+            }
             cursor = keyEnd + 1;
-            int next = section.indexOf(",", cursor);
-            if (next < 0) break;
-            cursor = next + 1;
         }
         return result;
     }
@@ -405,7 +406,7 @@ public class AydreamScreen extends Screen {
         int mainX = category.equals("dashboard") ? width / 2 - 330 : 195;
         int mainY = 48;
         int mainW = category.equals("dashboard") ? 660 : width - 225;
-        int mainH = Math.min(285, height - 88);
+        int mainH = category.equals("dashboard") ? Math.min(370, height - 88) : Math.min(285, height - 88);
 
         context.fill(mainX, mainY, mainX + mainW, mainY + mainH, PANEL);
         context.fill(mainX + 1, mainY + 1, mainX + mainW - 1, mainY + 55, GLASS);
