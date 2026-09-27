@@ -32,6 +32,8 @@ public class AydreamScreen extends Screen {
     private volatile String botPosition = "--";
     private volatile List<String> nearbyPlayers = List.of();
     private volatile List<String> savedHomes = List.of();
+    private volatile List<String> inventoryItems = List.of();
+    private volatile String heldItem = "empty";
     private volatile String actionMessage = "";
     private long nextRefresh = 0L;
 
@@ -124,6 +126,10 @@ public class AydreamScreen extends Screen {
         }
         if (category.equals("players")) {
             buildPlayers();
+            return;
+        }
+        if (category.equals("inventory")) {
+            buildInventory();
             return;
         }
 
@@ -276,6 +282,65 @@ public class AydreamScreen extends Screen {
             if (extractPlayerName(value).equalsIgnoreCase(player)) return value;
         }
         return player;
+    }
+
+    private void buildInventory() {
+        int left = 215;
+        int top = 92;
+
+        addButton(left, top, 190, 28, "Refresh Inventory", this::refreshInventory);
+        addButton(left + 200, top, 190, 28, "Equip Armor", () -> apiAction("!armor"));
+        addButton(left + 400, top, 190, 28, "Best Tool", () -> apiAction("!tool"));
+
+        contextText = "Held: " + heldItem;
+        int start = page * 12;
+        int end = Math.min(start + 12, inventoryItems.size());
+        for (int i = start; i < end; i++) {
+            int index = i - start;
+            int col = index % 3;
+            int row = index / 3;
+            addButton(left + col * 200, top + 45 + row * 34, 190, 28, inventoryItems.get(i), () -> {});
+        }
+        if (start > 0) addButton(left, top + 190, 80, 24, "<", () -> { page--; init(); });
+        if (end < inventoryItems.size()) addButton(left + 90, top + 190, 80, 24, ">", () -> { page++; init(); });
+    }
+
+    private void refreshInventory() {
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(apiBaseUrl + "/api/inventory"))
+            .GET()
+            .build();
+        apiClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
+            if (response.statusCode() != 200) return;
+            String body = response.body();
+            List<String> items = new ArrayList<>();
+            int cursor = 0;
+            while (true) {
+                int n = body.indexOf("\"name\":\"", cursor);
+                if (n < 0) break;
+                n += 9;
+                int e = body.indexOf("\"", n);
+                if (e < 0) break;
+                String name = body.substring(n, e);
+                int countStart = body.indexOf("\"count\":", e);
+                String count = "--";
+                if (countStart >= 0) {
+                    countStart += 8;
+                    int countEnd = countStart;
+                    while (countEnd < body.length() && ",}".indexOf(body.charAt(countEnd)) < 0) countEnd++;
+                    count = body.substring(countStart, countEnd).trim();
+                }
+                items.add(name + " x" + count);
+                cursor = e + 1;
+            }
+            inventoryItems = items;
+            int heldStart = body.indexOf("\"held\":");
+            heldItem = heldStart >= 0 && body.indexOf("\"name\":\"", heldStart) >= 0
+                ? value(body.substring(heldStart), "name") : "empty";
+            MinecraftClient.getInstance().execute(() -> {
+                if (MinecraftClient.getInstance().currentScreen == this) init();
+            });
+        }).exceptionally(error -> null);
     }
 
     private void buildSettings() {
