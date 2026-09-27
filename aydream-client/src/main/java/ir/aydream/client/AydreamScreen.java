@@ -35,6 +35,8 @@ public class AydreamScreen extends Screen {
     private volatile List<String> inventoryItems = List.of();
     private volatile String heldItem = "empty";
     private volatile String actionMessage = "";
+    private volatile String lastActivity = "--";
+    private volatile String botBusy = "--";
     private long nextRefresh = 0L;
 
     private static final int PANEL = 0xD91A1D26;
@@ -104,8 +106,8 @@ public class AydreamScreen extends Screen {
         int x = 28;
         int y = 65;
 
-        String[] labels = {"Dashboard", "Players", "Movement", "Combat", "Homes", "Automation", "Inventory", "Info", "Settings"};
-        String[] values = {"dashboard", "players", "movement", "combat", "homes", "automation", "inventory", "info", "settings"};
+        String[] labels = {"Dashboard", "Players", "Movement", "Combat", "Homes", "Automation", "Activity", "Inventory", "Info", "Settings"};
+        String[] values = {"dashboard", "players", "movement", "combat", "homes", "automation", "activity", "inventory", "info", "settings"};
 
         for (int i = 0; i < labels.length; i++) {
             String value = values[i];
@@ -311,6 +313,28 @@ public class AydreamScreen extends Screen {
         }
     }
 
+    private void buildAutomation() {
+        int left = 215;
+        int top = 92;
+        addButton(left, top, 185, 28, "Auto Eat", () -> apiAction("!eat"));
+        addButton(left + 195, top, 185, 28, "Autopilot On", () -> apiAction("!autopilot on"));
+        addButton(left + 390, top, 185, 28, "Autopilot Off", () -> apiAction("!autopilot off"));
+        addButton(left, top + 40, 185, 28, "Wander", () -> apiAction("!wander"));
+        addButton(left + 195, top + 40, 185, 28, "Clear Tasks", () -> apiAction("!clear"));
+        addButton(left + 390, top + 40, 185, 28, "Stop Everything", () -> apiAction("!stop"));
+        addButton(left, top + 80, 185, 28, "Refresh Status", this::forceRefresh);
+        contextText = "Task: " + botTask + "  |  Busy: " + botBusy;
+    }
+
+    private void buildActivity() {
+        int left = 215;
+        int top = 92;
+        addButton(left, top, 185, 28, "Refresh", this::forceRefresh);
+        addButton(left + 195, top, 185, 28, "Stop", () -> apiAction("!stop"));
+        addButton(left + 390, top, 185, 28, "Clear", () -> apiAction("!clear"));
+        contextText = "Last activity: " + lastActivity;
+    }
+
     private void buildInventory() {
         if (inventoryItems.isEmpty()) refreshInventory();
         int left = 215;
@@ -503,6 +527,8 @@ public class AydreamScreen extends Screen {
             botHealth = value(body, "health");
             botFood = value(body, "food");
             botTask = value(body, "task");
+            botBusy = value(body, "busy");
+            lastActivity = value(body, "lastActivity");
             String x = value(body, "x");
             String y = value(body, "y");
             String z = value(body, "z");
