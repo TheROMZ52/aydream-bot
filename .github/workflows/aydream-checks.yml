@@ -12,6 +12,8 @@ on:
   pull_request:
     paths:
       - "bot.js"
+      - "lib/**"
+      - "test/**"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/aydream-checks.yml"
