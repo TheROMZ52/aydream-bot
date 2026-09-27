@@ -22,8 +22,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.14.3"
-      - run: gradle build
+      - run: gradle --version
+      - run: gradle build --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: AydreamClient-1.0.0
           path: aydream-client/build/libs/*.jar
+          if-no-files-found: error
