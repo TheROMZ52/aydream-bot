@@ -132,6 +132,10 @@ public class AydreamScreen extends Screen {
             buildInventory();
             return;
         }
+        if (category.equals("homes")) {
+            buildHomes();
+            return;
+        }
 
         List<Entry> entries = new ArrayList<>();
 
@@ -282,6 +286,29 @@ public class AydreamScreen extends Screen {
             if (extractPlayerName(value).equalsIgnoreCase(player)) return value;
         }
         return player;
+    }
+
+    private void buildHomes() {
+        int left = 215;
+        int top = 92;
+        addButton(left, top, 185, 28, "Save Current", () -> apiAction("!sethome"));
+        addButton(left + 195, top, 185, 28, "Refresh", this::forceRefresh);
+        addButton(left + 390, top, 185, 28, "Home", () -> apiAction("!home"));
+
+        if (savedHomes.isEmpty()) {
+            contextText = apiOnline ? "No saved homes." : "Bot API is offline.";
+            return;
+        }
+
+        for (int i = 0; i < savedHomes.size(); i++) {
+            String home = savedHomes.get(i);
+            int col = i % 2;
+            int row = i / 2;
+            int x = left + col * 290;
+            int y = top + 42 + row * 48;
+            addButton(x, y, 185, 28, "Go: " + home, () -> apiAction("!home " + home));
+            addButton(x + 190, y, 75, 28, "Delete", () -> apiAction("!delhome " + home));
+        }
     }
 
     private void buildInventory() {
