@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - "bot.js"
+      - "lib/**"
+      - "test/**"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/aydream-checks.yml"
@@ -26,3 +28,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node --check bot.js
+      - run: npm test
