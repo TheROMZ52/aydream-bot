@@ -22,7 +22,6 @@ public class AydreamScreen extends Screen {
     private String category = "dashboard";
     private int page = 0;
     private String apiBaseUrl = "http://127.0.0.1:31880";
-    private String apiToken = "";
     private net.minecraft.client.gui.widget.TextFieldWidget urlField;
     private String settingsMessage = "";
     private final HttpClient apiClient = HttpClient.newHttpClient();
@@ -31,6 +30,9 @@ public class AydreamScreen extends Screen {
     private volatile String botHealth = "--";
     private volatile String botFood = "--";
     private volatile String botPosition = "--";
+    private volatile List<String> nearbyPlayers = List.of();
+    private volatile List<String> savedHomes = List.of();
+    private volatile String actionMessage = "";
     private long nextRefresh = 0L;
 
     private static final int PANEL = 0xD91A1D26;
@@ -75,9 +77,11 @@ public class AydreamScreen extends Screen {
         addButton(panelX + 225, panelY + 116, 185, 30, "Inventory", () -> open("inventory"));
         addButton(panelX + 425, panelY + 116, 185, 30, "Info", () -> open("info"));
 
-        addButton(panelX + 25, panelY + 170, 285, 30, "Quick Follow", () -> apiAction("!follow"));
-        addButton(panelX + 325, panelY + 170, 285, 30, "Stop Everything", () -> apiAction("!clear"));
+        addButton(panelX + 25, panelY + 170, 185, 30, "Quick Follow", () -> apiAction("!follow"));
+        addButton(panelX + 225, panelY + 170, 185, 30, "Stop Everything", () -> apiAction("!clear"));
+        addButton(panelX + 425, panelY + 170, 185, 30, "Refresh", this::forceRefresh);
         addButton(panelX + 25, panelY + 208, 285, 30, "Settings", () -> open("settings"));
+        addButton(panelX + 325, panelY + 208, 285, 30, "Info", () -> open("info"));
     }
 
     private void buildSidebar() {
@@ -240,7 +244,6 @@ public class AydreamScreen extends Screen {
 
     private void resetConfig() {
         apiBaseUrl = "http://127.0.0.1:31880";
-        apiToken = "";
         settingsMessage = "Reset";
         init();
     }
@@ -272,7 +275,20 @@ public class AydreamScreen extends Screen {
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json))
             .build();
-        apiClient.sendAsync(request, HttpResponse.BodyHandlers.discarding());
+        apiClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
+            actionMessage = response.statusCode() >= 200 && response.statusCode() < 300
+                ? "Sent: " + command
+                : "Action failed";
+        }).exceptionally(error -> {
+            actionMessage = "API offline";
+            return null;
+        });
+    }
+
+    private void forceRefresh() {
+        nextRefresh = 0L;
+        refreshStatus();
+        settingsMessage = "Refreshed";
     }
 
     private void refreshStatus() {
@@ -281,7 +297,6 @@ public class AydreamScreen extends Screen {
         nextRefresh = now + 1000L;
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(apiBaseUrl + "/api/status"))
-            .header("Authorization", "Bearer " + API_TOKEN)
             .GET()
             .build();
         apiClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
@@ -292,6 +307,8 @@ public class AydreamScreen extends Screen {
             String body = response.body();
             apiOnline = true;
             settingsMessage = "Connected";
+            nearbyPlayers = parsePlayers(body);
+            savedHomes = parseHomeNames(body);
             botHealth = value(body, "health");
             botFood = value(body, "food");
             botTask = value(body, "task");
@@ -303,6 +320,58 @@ public class AydreamScreen extends Screen {
             apiOnline = false;
             return null;
         });
+    }
+
+    private List<String> parsePlayers(String json) {
+        List<String> result = new ArrayList<>();
+        int start = json.indexOf("\"players\":[");
+        if (start < 0) return result;
+        int end = json.indexOf("],\"homes\"", start);
+        if (end < 0) end = json.length();
+        String section = json.substring(start, end);
+        int cursor = 0;
+        while (cursor < section.length()) {
+            int nameStart = section.indexOf("\"name\":\"", cursor);
+            if (nameStart < 0) break;
+            nameStart += 8;
+            int nameEnd = section.indexOf("\"", nameStart);
+            if (nameEnd < 0) break;
+            String name = section.substring(nameStart, nameEnd);
+            int distanceStart = section.indexOf("\"distance\":", nameEnd);
+            String distance = "--";
+            if (distanceStart >= 0) {
+                distanceStart += 11;
+                int distanceEnd = distanceStart;
+                while (distanceEnd < section.length() && ",}".indexOf(section.charAt(distanceEnd)) < 0) distanceEnd++;
+                distance = section.substring(distanceStart, distanceEnd).trim();
+            }
+            result.add(distance.equals("null") ? name : name + "  " + distance + "m");
+            cursor = nameEnd + 1;
+        }
+        return result;
+    }
+
+    private List<String> parseHomeNames(String json) {
+        List<String> result = new ArrayList<>();
+        int start = json.indexOf("\"homes\":{");
+        if (start < 0) return result;
+        start += 9;
+        int end = json.indexOf("}", start);
+        if (end < 0) end = json.length();
+        String section = json.substring(start, end);
+        int cursor = 0;
+        while (cursor < section.length()) {
+            int keyStart = section.indexOf("\"", cursor);
+            if (keyStart < 0) break;
+            int keyEnd = section.indexOf("\"", keyStart + 1);
+            if (keyEnd < 0) break;
+            result.add(section.substring(keyStart + 1, keyEnd));
+            cursor = keyEnd + 1;
+            int next = section.indexOf(",", cursor);
+            if (next < 0) break;
+            cursor = next + 1;
+        }
+        return result;
     }
 
     private String value(String json, String key) {
@@ -357,6 +426,31 @@ public class AydreamScreen extends Screen {
             context.drawText(textRenderer, Text.literal("FOOD  " + botFood), mainX + 150, mainY + 218, TEXT, false);
             context.drawText(textRenderer, Text.literal("TASK  " + botTask), mainX + 285, mainY + 218, TEXT, false);
             context.drawText(textRenderer, Text.literal("POS  " + botPosition), mainX + 25, mainY + 238, MUTED, false);
+
+            int cardY = mainY + 258;
+            int cardW = (mainW - 60) / 2;
+            context.fill(mainX + 25, cardY, mainX + 25 + cardW, cardY + 70, PANEL_LIGHT);
+            context.fill(mainX + 35 + cardW, cardY, mainX + 35 + cardW * 2, cardY + 70, PANEL_LIGHT);
+            context.drawText(textRenderer, Text.literal("NEARBY PLAYERS  " + nearbyPlayers.size()), mainX + 35, cardY + 10, TEXT, true);
+            int playerY = cardY + 27;
+            for (int i = 0; i < Math.min(3, nearbyPlayers.size()); i++) {
+                context.drawText(textRenderer, Text.literal(nearbyPlayers.get(i)), mainX + 35, playerY + i * 13, MUTED, false);
+            }
+            if (nearbyPlayers.isEmpty()) {
+                context.drawText(textRenderer, Text.literal(apiOnline ? "No players detected" : "Waiting for bot..."), mainX + 35, playerY, MUTED, false);
+            }
+
+            context.drawText(textRenderer, Text.literal("HOMES  " + savedHomes.size()), mainX + 45 + cardW, cardY + 10, TEXT, true);
+            int homeY = cardY + 27;
+            for (int i = 0; i < Math.min(3, savedHomes.size()); i++) {
+                context.drawText(textRenderer, Text.literal(savedHomes.get(i)), mainX + 45 + cardW, homeY + i * 13, MUTED, false);
+            }
+            if (savedHomes.isEmpty()) {
+                context.drawText(textRenderer, Text.literal("No saved homes"), mainX + 45 + cardW, homeY, MUTED, false);
+            }
+            if (!actionMessage.isEmpty()) {
+                context.drawText(textRenderer, Text.literal(actionMessage), mainX + 25, mainY + mainH - 10, ACCENT, false);
+            }
         } else {
             context.drawText(textRenderer, Text.literal(category.toUpperCase()), mainX + 24, mainY + 62, MUTED, true);
             if (category.equals("settings")) {
