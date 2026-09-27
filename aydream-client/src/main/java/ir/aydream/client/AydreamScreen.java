@@ -102,8 +102,8 @@ public class AydreamScreen extends Screen {
         int x = 28;
         int y = 65;
 
-        String[] labels = {"Dashboard", "Movement", "Combat", "Homes", "Automation", "Inventory", "Info", "Settings"};
-        String[] values = {"dashboard", "movement", "combat", "homes", "automation", "inventory", "info", "settings"};
+        String[] labels = {"Dashboard", "Players", "Movement", "Combat", "Homes", "Automation", "Inventory", "Info", "Settings"};
+        String[] values = {"dashboard", "players", "movement", "combat", "homes", "automation", "inventory", "info", "settings"};
 
         for (int i = 0; i < labels.length; i++) {
             String value = values[i];
@@ -114,8 +114,16 @@ public class AydreamScreen extends Screen {
     private void buildCategory() {
         int left = 215;
         int top = 82;
+        if (category.startsWith("player:")) {
+            buildPlayerDetail(category.substring(7));
+            return;
+        }
         if (category.equals("settings")) {
             buildSettings();
+            return;
+        }
+        if (category.equals("players")) {
+            buildPlayers();
             return;
         }
 
@@ -200,6 +208,74 @@ public class AydreamScreen extends Screen {
                 init();
             });
         }
+    }
+
+    private void buildPlayers() {
+        int left = 215;
+        int top = 92;
+
+        if (nearbyPlayers.isEmpty()) {
+            contextText = apiOnline ? "No players detected." : "Bot API is offline.";
+            return;
+        }
+
+        int start = page * 6;
+        int end = Math.min(start + 6, nearbyPlayers.size());
+
+        for (int i = start; i < end; i++) {
+            String display = nearbyPlayers.get(i);
+            String player = extractPlayerName(display);
+            int index = i - start;
+            int col = index % 2;
+            int row = index / 2;
+            int x = left + col * 215;
+            int y = top + row * 64;
+
+            contextText = display;
+            addButton(x, y, 200, 28, player, () -> openPlayer(player));
+            addButton(x, y + 32, 62, 24, "Follow", () -> apiAction("!follow " + player));
+            addButton(x + 68, y + 32, 62, 24, "Come", () -> apiAction("!come " + player));
+            addButton(x + 136, y + 32, 64, 24, "Attack", () -> apiAction("!attack " + player));
+        }
+
+        if (start > 0) {
+            addButton(left, top + 200, 80, 24, "<", () -> {
+                page--;
+                init();
+            });
+        }
+        if (end < nearbyPlayers.size()) {
+            addButton(left + 90, top + 200, 80, 24, ">", () -> {
+                page++;
+                init();
+            });
+        }
+    }
+
+    private void openPlayer(String player) {
+        category = "player:" + player;
+        page = 0;
+        init();
+    }
+
+    private void buildPlayerDetail(String player) {
+        int left = 235;
+        int top = 98;
+        contextText = findPlayerDisplay(player);
+
+        addButton(left, top, 185, 30, "Follow", () -> apiAction("!follow " + player));
+        addButton(left + 200, top, 185, 30, "Come", () -> apiAction("!come " + player));
+        addButton(left, top + 40, 185, 30, "Attack", () -> apiAction("!attack " + player));
+        addButton(left + 200, top + 40, 185, 30, "Look At", () -> apiAction("!lookat " + player));
+        addButton(left, top + 80, 185, 30, "Stop", () -> apiAction("!stop"));
+        addButton(left + 200, top + 80, 185, 30, "Back", () -> open("players"));
+    }
+
+    private String findPlayerDisplay(String player) {
+        for (String value : nearbyPlayers) {
+            if (extractPlayerName(value).equalsIgnoreCase(player)) return value;
+        }
+        return player;
     }
 
     private void buildSettings() {
@@ -480,7 +556,12 @@ public class AydreamScreen extends Screen {
                 context.drawText(textRenderer, Text.literal(actionMessage), mainX + 25, mainY + mainH - 10, ACCENT, false);
             }
         } else {
-            context.drawText(textRenderer, Text.literal(category.toUpperCase()), mainX + 24, mainY + 62, MUTED, true);
+            String title = category.startsWith("player:") ? "PLAYER / " + category.substring(7).toUpperCase() : category.toUpperCase();
+            context.drawText(textRenderer, Text.literal(title), mainX + 24, mainY + 62, MUTED, true);
+            if (category.startsWith("player:")) {
+                context.drawText(textRenderer, Text.literal("TARGET"), mainX + 24, mainY + 82, ACCENT, true);
+                context.drawText(textRenderer, Text.literal(contextText), mainX + 24, mainY + 108, MUTED, false);
+            }
             if (category.equals("settings")) {
                 context.drawText(textRenderer, Text.literal("LOCAL ONLY"), mainX + 24, mainY + 82, ACCENT, true);
                 context.drawText(textRenderer, Text.literal(contextText), mainX + 24, mainY + 235, MUTED, false);
