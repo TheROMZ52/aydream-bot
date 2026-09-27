@@ -303,6 +303,7 @@ async function runSetupPanel() {
 
     const host = await askSetup("Server host", saved.host || HOST);
     const portAnswer = await askSetup("Server port", saved.port || PORT);
+    const parsedPort = Number(portAnswer);
     const username = await askSetup("Bot username", saved.username || USERNAME);
     const version = await askSetup("Minecraft version", saved.version || VERSION);
     const controller = await askSetup("Controller username", saved.controller || CONTROLLER);
@@ -320,9 +321,13 @@ async function runSetupPanel() {
     // console command listener set up later still receives input.
     process.stdin.resume();
 
+    const port = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535
+        ? parsedPort
+        : PORT;
+
     const config = {
         host,
-        port: Number(portAnswer),
+        port,
         username,
         version,
         controller,
