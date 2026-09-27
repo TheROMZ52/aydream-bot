@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "aydream-client",
+  "version": "${version}",
+  "name": "Aydream Client",
+  "description": "A personal client menu for Aydream on Minecraft 1.21.8.",
+  "authors": ["TheROMZ52"],
+  "environment": "client",
+  "entrypoints": {
+    "client": ["ir.aydream.client.AydreamClient"]
+  },
+  "depends": {
+    "minecraft": "1.21.8",
+    "fabricloader": ">=0.17.0",
+    "fabric-api": "*"
+  }
+}
