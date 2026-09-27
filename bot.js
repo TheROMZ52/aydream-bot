@@ -306,6 +306,87 @@ async function runSetupPanel() {
     let reconnectAttempts = 0;
     let reconnectTimer = null;
     let backgroundLoopsStarted = false;
+    const controlTimers = new Set();
+    const HOMES_FILE = path.join(__dirname, "homes.json");
+
+    function setControlTimer(callback, ms) {
+        const timer = setTimeout(() => {
+            controlTimers.delete(timer);
+            callback();
+        }, ms);
+        controlTimers.add(timer);
+        return timer;
+    }
+
+    function clearControlTimers() {
+        for (const timer of controlTimers) {
+            clearTimeout(timer);
+        }
+        controlTimers.clear();
+    }
+
+    function saveHomes() {
+        try {
+            fs.writeFileSync(HOMES_FILE, JSON.stringify(Object.fromEntries(homes), null, 2));
+        } catch (error) {
+            log("[ERROR] Could not save homes:", error.message);
+        }
+    }
+
+    function loadHomes() {
+        try {
+            const savedHomes = JSON.parse(fs.readFileSync(HOMES_FILE, "utf8"));
+            for (const [name, position] of Object.entries(savedHomes)) {
+                if (
+                    position &&
+                    Number.isFinite(position.x) &&
+                    Number.isFinite(position.y) &&
+                    Number.isFinite(position.z)
+                ) {
+                    homes.set(name, {
+                        x: Math.floor(position.x),
+                        y: Math.floor(position.y),
+                        z: Math.floor(position.z)
+                    });
+                }
+            }
+        } catch (error) {
+            if (error.code !== "ENOENT") {
+                log("[ERROR] Could not load homes:", error.message);
+            }
+        }
+    }
+
+    function findPlayer(name) {
+        if (!name || !bot || !bot.players) return null;
+        const wanted = name.toLowerCase();
+        return Object.values(bot.players).find((player) =>
+            player &&
+            player.username &&
+            player.username.toLowerCase() === wanted &&
+            player.entity
+        ) || null;
+    }
+
+    function clearAllTasks() {
+        stopFighting();
+        stopFleeing();
+        stopHunting();
+        stopGuard();
+        isEscapingHazard = false;
+        isMining = false;
+        isFarming = false;
+        isCollecting = false;
+        if (autoModeInterval) {
+            clearInterval(autoModeInterval);
+            autoModeInterval = null;
+        }
+        autoMode = false;
+        if (bot && bot.pathfinder) bot.pathfinder.setGoal(null);
+        if (bot) bot.clearControlStates();
+        clearControlTimers();
+    }
+
 
     // ========================================
     // Activity
@@ -372,6 +453,7 @@ async function runSetupPanel() {
 
         lastHealth = null;
         markActivity();
+        clearControlTimers();
 
     }
 
@@ -3670,8 +3752,228 @@ function setSkin(value, notify) {
                     return;
                 }
 
+
+                if (command === "coords") {
+                    if (!bot.entity) {
+                        bot.chat("Position unavailable.");
+                        return;
+                    }
+                    const p = bot.entity.position;
+                    bot.chat("Position: " + p.x.toFixed(1) + " " + p.y.toFixed(1) + " " + p.z.toFixed(1));
+                    return;
+                }
+
+                if (command === "time") {
+                    const time = bot.time;
+                    bot.chat("World time: " + time.timeOfDay + " | Day: " + time.day);
+                    return;
+                }
+
+                if (command === "look") {
+                    if (!bot.entity) return;
+                    const yaw = bot.entity.yaw * 180 / Math.PI;
+                    const pitch = bot.entity.pitch * 180 / Math.PI;
+                    bot.chat("Look: yaw " + yaw.toFixed(1) + " pitch " + pitch.toFixed(1));
+                    return;
+                }
+
+                if (command === "lookat") {
+                    const target = findPlayer(parts[0]);
+                    if (!target) {
+                        bot.chat("Player not found or not visible.");
+                        return;
+                    }
+                    try {
+                        await bot.lookAt(target.entity.position.offset(0, 1.5, 0), true);
+                        bot.chat("Looking at " + target.username + ".");
+                    } catch (error) {
+                        bot.chat("Look failed: " + error.message);
+                    }
+                    return;
+                }
+
+                if (command === "follow") {
+                    const target = findPlayer(parts[0]);
+                    if (!target) {
+                        bot.chat("Usage: !follow <player>");
+                        return;
+                    }
+                    clearAllTasks();
+                    bot.pathfinder.setGoal(new goals.GoalFollow(target.entity, 2), true);
+                    bot.chat("Following " + target.username + ".");
+                    return;
+                }
+
+                if (command === "come") {
+                    const target = parts[0] ? findPlayer(parts[0]) : null;
+                    const player = target || Object.values(bot.players).find((p) =>
+                        p && p.entity && p.username !== bot.username
+                    );
+                    if (!player) {
+                        bot.chat("Player not found.");
+                        return;
+                    }
+                    clearAllTasks();
+                    bot.pathfinder.setGoal(new goals.GoalFollow(player.entity, 1), true);
+                    bot.chat("Coming to " + player.username + ".");
+                    return;
+                }
+
+                if (command === "goto") {
+                    if (parts.length !== 3 || parts.some((p) => !Number.isFinite(Number(p)))) {
+                        bot.chat("Usage: !goto <x> <y> <z>");
+                        return;
+                    }
+                    const [x, y, z] = parts.map(Number);
+                    clearAllTasks();
+                    bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
+                    bot.chat("Going to " + x + " " + y + " " + z + ".");
+                    return;
+                }
+
+                if (command === "scan") {
+                    const radius = Math.min(64, Math.max(1, Number(parts[0]) || 16));
+                    if (!bot.entity) return;
+                    const entities = Object.values(bot.entities)
+                        .filter((entity) =>
+                            entity &&
+                            entity.position &&
+                            entity !== bot.entity &&
+                            bot.entity.position.distanceTo(entity.position) <= radius
+                        );
+                    const players = entities.filter((entity) => entity.type === "player").length;
+                    const mobs = entities.filter((entity) => entity.type === "mob").length;
+                    const items = entities.filter((entity) => entity.name === "item").length;
+                    bot.chat("Scan " + radius + "m: players=" + players + " mobs=" + mobs + " items=" + items);
+                    return;
+                }
+
+                if (command === "block") {
+                    let block = null;
+                    if (parts.length === 3 && parts.every((p) => Number.isFinite(Number(p)))) {
+                        const [x, y, z] = parts.map(Number);
+                        block = bot.blockAt(new Vec3(x, y, z));
+                    } else if (bot.blockAtCursor) {
+                        block = bot.blockAtCursor(6);
+                    }
+                    if (!block) {
+                        bot.chat("No block found.");
+                        return;
+                    }
+                    bot.chat(block.name + " at " + block.position.x + " " + block.position.y + " " + block.position.z);
+                    return;
+                }
+
+                if (command === "find") {
+                    const name = parts[0] && parts[0].toLowerCase();
+                    const radius = Math.min(32, Math.max(1, Number(parts[1]) || 16));
+                    if (!name || !bot.entity) {
+                        bot.chat("Usage: !find <block> [radius]");
+                        return;
+                    }
+                    let nearest = null;
+                    let nearestDistance = Infinity;
+                    const origin = bot.entity.position;
+                    const ox = Math.floor(origin.x);
+                    const oy = Math.floor(origin.y);
+                    const oz = Math.floor(origin.z);
+                    const r = Math.floor(radius);
+                    for (let x = ox - r; x <= ox + r; x++) {
+                        for (let y = Math.max(-64, oy - r); y <= Math.min(320, oy + r); y++) {
+                            for (let z = oz - r; z <= oz + r; z++) {
+                                const block = bot.blockAt(new Vec3(x, y, z));
+                                if (!block || !block.name.includes(name)) continue;
+                                const distance = origin.distanceTo(block.position);
+                                if (distance < nearestDistance) {
+                                    nearest = block;
+                                    nearestDistance = distance;
+                                }
+                            }
+                        }
+                    }
+                    if (!nearest) {
+                        bot.chat("No matching block within " + radius + "m.");
+                    } else {
+                        bot.chat(nearest.name + " at " + nearest.position.x + " " + nearest.position.y + " " + nearest.position.z + " (" + nearestDistance.toFixed(1) + "m)");
+                    }
+                    return;
+                }
+
+                if (command === "eat") {
+                    if (!bot.autoEat || typeof bot.autoEat.eat !== "function") {
+                        bot.chat("Auto-eat is unavailable.");
+                        return;
+                    }
+                    try {
+                        await bot.autoEat.eat();
+                        bot.chat("Eating.");
+                    } catch (error) {
+                        bot.chat("Eat failed: " + error.message);
+                    }
+                    return;
+                }
+
+                if (command === "totem") {
+                    try {
+                        await tryEquipTotem();
+                        bot.chat("Totem check complete.");
+                    } catch (error) {
+                        bot.chat("Totem equip failed: " + error.message);
+                    }
+                    return;
+                }
+
+                if (command === "weapon") {
+                    await equipWeapon();
+                    bot.chat("Best weapon equipped.");
+                    return;
+                }
+
+                if (command === "tool") {
+                    const block = bot.blockAtCursor ? bot.blockAtCursor(6) : null;
+                    if (!block) {
+                        bot.chat("Look at a block first.");
+                        return;
+                    }
+                    await equipBestTool(block);
+                    bot.chat("Best tool equipped for " + block.name + ".");
+                    return;
+                }
+
+                if (command === "attack") {
+                    const target = findPlayer(parts[0]);
+                    if (!target) {
+                        bot.chat("Player not found or not visible.");
+                        return;
+                    }
+                    await equipWeapon();
+                    try {
+                        if (bot.entity.position.distanceTo(target.entity.position) > 4) {
+                            bot.pathfinder.setGoal(new goals.GoalNear(
+                                target.entity.position.x,
+                                target.entity.position.y,
+                                target.entity.position.z,
+                                2
+                            ));
+                        } else {
+                            await bot.lookAt(target.entity.position.offset(0, 1.5, 0), true);
+                            bot.attack(target.entity);
+                        }
+                        bot.chat("Attack command sent to " + target.username + ".");
+                    } catch (error) {
+                        bot.chat("Attack failed: " + error.message);
+                    }
+                    return;
+                }
+
+                if (command === "stop") {
+                    clearAllTasks();
+                    bot.chat("All tasks stopped.");
+                    return;
+                }
+
                 if (command === "help") {
-                    bot.chat("Commands: help, players, near, health, sethome, home, delhome, equip, armor, drop, hand, jump, sprint, sneak, move, face, distance, where, watch, autopilot, clear, stop");
+                    bot.chat("Commands: help, players, near, health, coords, time, look, lookat, follow, come, goto, scan, block, find, sethome, home, delhome, equip, armor, drop, hand, eat, totem, weapon, tool, attack, jump, sprint, sneak, move, face, distance, where, watch, autopilot, clear, stop");
                     return;
                 }
 
@@ -3727,6 +4029,7 @@ function setSkin(value, notify) {
                 if (command === "delhome") {
                     const name = parts[0] || "home";
                     if (homes.delete(name)) {
+                        saveHomes();
                         bot.chat("Home '" + name + "' deleted.");
                     } else {
                         bot.chat("Home '" + name + "' not found.");
@@ -3811,7 +4114,7 @@ function setSkin(value, notify) {
                 if (command === "jump") {
                     const seconds = Math.min(10, Math.max(0.2, Number(parts[0]) || 1));
                     bot.setControlState("jump", true);
-                    setTimeout(() => bot.setControlState("jump", false), seconds * 1000);
+                    setControlTimer(() => bot.setControlState("jump", false), seconds * 1000);
                     bot.chat("Jumping.");
                     return;
                 }
@@ -3839,7 +4142,7 @@ function setSkin(value, notify) {
                         return;
                     }
                     bot.setControlState(direction, true);
-                    setTimeout(() => bot.setControlState(direction, false), seconds * 1000);
+                    setControlTimer(() => bot.setControlState(direction, false), seconds * 1000);
                     bot.chat("Moving " + direction + " for " + seconds + "s.");
                     return;
                 }
@@ -4124,6 +4427,8 @@ function setSkin(value, notify) {
         );
 
     }
+
+    loadHomes();
 
     // Ask for connection info before doing anything else.
     const setupConfig = await runSetupPanel();
