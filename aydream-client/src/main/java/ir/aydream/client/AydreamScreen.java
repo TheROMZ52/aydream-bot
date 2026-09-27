@@ -6,6 +6,11 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,6 +18,15 @@ public class AydreamScreen extends Screen {
     private final Screen parent;
     private String category = "dashboard";
     private int page = 0;
+    private static final String API_BASE_URL = "http://127.0.0.1:31880";
+    private static final String API_TOKEN = "PUT_YOUR_TOKEN_HERE";
+    private final HttpClient apiClient = HttpClient.newHttpClient();
+    private volatile boolean apiOnline = false;
+    private volatile String botTask = "offline";
+    private volatile String botHealth = "--";
+    private volatile String botFood = "--";
+    private volatile String botPosition = "--";
+    private long nextRefresh = 0L;
 
     private static final int PANEL = 0xD91A1D26;
     private static final int PANEL_LIGHT = 0xE0262935;
@@ -32,6 +46,7 @@ public class AydreamScreen extends Screen {
 
         if (category.equals("dashboard")) {
             buildDashboard();
+            refreshStatus();
         } else {
             buildSidebar();
             buildCategory();
@@ -54,8 +69,8 @@ public class AydreamScreen extends Screen {
         addButton(panelX + 225, panelY + 116, 185, 30, "Inventory", () -> open("inventory"));
         addButton(panelX + 425, panelY + 116, 185, 30, "Info", () -> open("info"));
 
-        addButton(panelX + 25, panelY + 170, 285, 30, "Quick Follow", () -> send("!follow"));
-        addButton(panelX + 325, panelY + 170, 285, 30, "Stop Everything", () -> send("!clear"));
+        addButton(panelX + 25, panelY + 170, 285, 30, "Quick Follow", () -> apiAction("!follow"));
+        addButton(panelX + 325, panelY + 170, 285, 30, "Stop Everything", () -> apiAction("!clear"));
     }
 
     private void buildSidebar() {
@@ -171,6 +186,62 @@ public class AydreamScreen extends Screen {
         );
     }
 
+    private void apiAction(String command) {
+        String json = "{\"command\":\"" + command.replace("\\", "\\\\").replace("\"", "\\\"") + "\"}";
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(API_BASE_URL + "/api/action"))
+            .header("Authorization", "Bearer " + API_TOKEN)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json))
+            .build();
+        apiClient.sendAsync(request, HttpResponse.BodyHandlers.discarding());
+    }
+
+    private void refreshStatus() {
+        long now = System.currentTimeMillis();
+        if (now < nextRefresh) return;
+        nextRefresh = now + 1000L;
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(API_BASE_URL + "/api/status"))
+            .header("Authorization", "Bearer " + API_TOKEN)
+            .GET()
+            .build();
+        apiClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
+            if (response.statusCode() != 200) {
+                apiOnline = false;
+                return;
+            }
+            String body = response.body();
+            apiOnline = true;
+            botHealth = value(body, "health");
+            botFood = value(body, "food");
+            botTask = value(body, "task");
+            String x = value(body, "x");
+            String y = value(body, "y");
+            String z = value(body, "z");
+            if (!x.equals("--") && !y.equals("--") && !z.equals("--")) botPosition = x + " " + y + " " + z;
+        }).exceptionally(error -> {
+            apiOnline = false;
+            return null;
+        });
+    }
+
+    private String value(String json, String key) {
+        String pattern = "\"" + key + "\":";
+        int i = json.indexOf(pattern);
+        if (i < 0) return "--";
+        int start = i + pattern.length();
+        while (start < json.length() && Character.isWhitespace(json.charAt(start))) start++;
+        if (start >= json.length()) return "--";
+        if (json.charAt(start) == '"') {
+            int end = json.indexOf('"', start + 1);
+            return end > start ? json.substring(start + 1, end) : "--";
+        }
+        int end = start;
+        while (end < json.length() && ",}\n".indexOf(json.charAt(end)) < 0) end++;
+        return json.substring(start, end).trim();
+    }
+
     private void send(String command) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player != null) {
@@ -181,6 +252,7 @@ public class AydreamScreen extends Screen {
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         renderBackground(context, mouseX, mouseY, delta);
+        refreshStatus();
 
         int mainX = category.equals("dashboard") ? width / 2 - 330 : 195;
         int mainY = 48;
@@ -200,7 +272,12 @@ public class AydreamScreen extends Screen {
 
         if (category.equals("dashboard")) {
             context.drawText(textRenderer, Text.literal("Bot Control"), mainX + 25, mainY + 62, MUTED, false);
-            context.drawText(textRenderer, Text.literal("READY"), mainX + mainW - 75, mainY + 22, 0xFF7CFFB2, true);
+            int statusColor = apiOnline ? 0xFF7CFFB2 : 0xFFFF7777;
+            context.drawText(textRenderer, Text.literal(apiOnline ? "ONLINE" : "OFFLINE"), mainX + mainW - 82, mainY + 22, statusColor, true);
+            context.drawText(textRenderer, Text.literal("HP  " + botHealth), mainX + 25, mainY + 218, TEXT, false);
+            context.drawText(textRenderer, Text.literal("FOOD  " + botFood), mainX + 150, mainY + 218, TEXT, false);
+            context.drawText(textRenderer, Text.literal("TASK  " + botTask), mainX + 285, mainY + 218, TEXT, false);
+            context.drawText(textRenderer, Text.literal("POS  " + botPosition), mainX + 25, mainY + 238, MUTED, false);
         } else {
             context.drawText(textRenderer, Text.literal(category.toUpperCase()), mainX + 24, mainY + 62, MUTED, true);
         }
