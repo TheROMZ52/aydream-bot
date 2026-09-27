@@ -689,6 +689,11 @@ public class AydreamScreen extends Screen {
                 context.drawText(textRenderer, Text.literal("TARGET"), mainX + 24, mainY + 82, ACCENT, true);
                 context.drawText(textRenderer, Text.literal(contextText), mainX + 24, mainY + 108, MUTED, false);
             }
+            if (category.equals("automation") || category.equals("activity")) {
+                context.fill(mainX + 24, mainY + 92, mainX + mainW - 24, mainY + 145, PANEL_LIGHT);
+                context.drawText(textRenderer, Text.literal(contextText), mainX + 36, mainY + 110, TEXT, false);
+                context.drawText(textRenderer, Text.literal("LIVE STATUS"), mainX + 36, mainY + 128, MUTED, false);
+            }
             if (category.equals("settings")) {
                 context.drawText(textRenderer, Text.literal("LOCAL ONLY"), mainX + 24, mainY + 82, ACCENT, true);
                 context.drawText(textRenderer, Text.literal(contextText), mainX + 24, mainY + 235, MUTED, false);
