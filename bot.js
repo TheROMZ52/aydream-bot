@@ -11,6 +11,8 @@ const path = require("path");
 const readline = require("readline");
 const http = require("http");
 const crypto = require("crypto");
+const { createSetupInput } = require("./lib/setup-input");
+const { createApiSecurity } = require("./lib/api-security");
 
 // ============================================
 // Simple logger: prints to console AND appends
@@ -279,7 +281,16 @@ async function runSetupPanel() {
         })
         : null;
 
-    const inputLines = rl ? [] : fs.readFileSync(0, "utf8").split(/\r?\n/);
+    let pipedInput = "";
+    if (!rl) {
+        try {
+            pipedInput = fs.readFileSync(0, "utf8");
+        } catch (error) {
+            pipedInput = "";
+        }
+    }
+    const setupInput = createSetupInput(Boolean(rl), pipedInput, (message) => process.stdout.write(message + "\n"));
+    const inputLines = rl ? [] : pipedInput.split(/\r?\n/);
     const inputIndex = { value: 0 };
 
     log("=============================================");
@@ -425,6 +436,7 @@ async function runSetupPanel() {
         `http://localhost:${API_PORT}`
     ]);
     let API_TOKEN = process.env.AYDREAM_API_TOKEN || "";
+    let apiSecurity = null;
 
     function loadApiToken() {
         if (API_TOKEN.trim()) return API_TOKEN.trim();
@@ -440,11 +452,12 @@ async function runSetupPanel() {
             fs.writeFileSync(API_TOKEN_FILE, API_TOKEN + "\n", { mode: 0o600 });
         }
 
+        apiSecurity = createApiSecurity(API_TOKEN, API_ALLOWED_ORIGINS);
         return API_TOKEN;
     }
 
     function isApiAuthorized(req) {
-        return req.headers.authorization === `Bearer ${API_TOKEN}`;
+        return apiSecurity && apiSecurity.authorize(req);
     }
 
     function getApiStatus() {
@@ -491,8 +504,9 @@ async function runSetupPanel() {
     function startApiServer() {
         const server = http.createServer((req, res) => {
             const origin = req.headers.origin || "";
-            if (origin && API_ALLOWED_ORIGINS.has(origin)) {
-                res.setHeader("Access-Control-Allow-Origin", origin);
+            const allowedOrigin = apiSecurity && apiSecurity.corsOrigin(origin);
+            if (allowedOrigin) {
+                res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
                 res.setHeader("Vary", "Origin");
             }
             res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -500,7 +514,7 @@ async function runSetupPanel() {
             res.setHeader("Content-Type", "application/json; charset=utf-8");
 
             if (req.method === "OPTIONS") {
-                if (origin && !API_ALLOWED_ORIGINS.has(origin)) {
+                if (origin && !(apiSecurity && apiSecurity.corsOrigin(origin))) {
                     res.writeHead(403);
                     res.end(JSON.stringify({ error: "origin not allowed" }));
                     return;
