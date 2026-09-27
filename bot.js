@@ -13,6 +13,7 @@ const http = require("http");
 const crypto = require("crypto");
 const { createSetupInput } = require("./lib/setup-input");
 const { createApiSecurity } = require("./lib/api-security");
+const { createNavigator } = require("./lib/navigation");
 
 // ============================================
 // Simple logger: prints to console AND appends
@@ -386,6 +387,7 @@ async function runSetupPanel() {
     let mcData = null;
     let normalMovements = null;
     let diggingMovements = null;
+    let navigator = null;
 
     let lastHealth = null;
     const homes = new Map();
@@ -687,7 +689,7 @@ async function runSetupPanel() {
             autoModeInterval = null;
         }
         autoMode = false;
-        if (bot && bot.pathfinder) bot.pathfinder.setGoal(null);
+        if (bot && bot.pathfinder) navigator.setGoal(null);
         if (bot) bot.clearControlStates();
         clearControlTimers();
     }
@@ -974,7 +976,7 @@ async function runSetupPanel() {
 
         equipWeapon();
 
-        bot.pathfinder.setGoal(
+        navigator.setGoal(
             new goals.GoalFollow(
                 target,
                 2
@@ -1074,7 +1076,7 @@ async function runSetupPanel() {
 
         if (!isFleeing) {
 
-            bot.pathfinder.setGoal(
+            navigator.setGoal(
                 null
             );
 
@@ -1369,7 +1371,7 @@ async function runSetupPanel() {
 
         if (!isFighting) {
 
-            bot.pathfinder.setGoal(
+            navigator.setGoal(
                 null
             );
 
@@ -1521,7 +1523,7 @@ async function runSetupPanel() {
                         `[+] Escape target: ${safe.x}, ${safe.y}, ${safe.z}`
                     );
 
-                    bot.pathfinder.setGoal(
+                    navigator.setGoal(
                         new goals.GoalNear(
                             safe.x,
                             safe.y,
@@ -1565,7 +1567,7 @@ async function runSetupPanel() {
                             12
                         );
 
-                    bot.pathfinder.setGoal(
+                    navigator.setGoal(
                         new goals.GoalNear(
                             x,
                             Math.floor(pos.y),
@@ -1923,7 +1925,7 @@ async function runSetupPanel() {
 
         try {
             if (bot.entity.position.distanceTo(position) > 4.5) {
-                await bot.pathfinder.goto(
+                await navigator.goto(
                     new goals.GoalNear(position.x, position.y, position.z, 3)
                 );
             }
@@ -1982,7 +1984,7 @@ async function runSetupPanel() {
                         if (bot.entity.position.distanceTo(pos) > 4.5) {
 
                             try {
-                                await bot.pathfinder.goto(
+                                await navigator.goto(
                                     new goals.GoalNear(x, y, z, 3)
                                 );
                             } catch (error) {
@@ -2143,7 +2145,7 @@ async function runSetupPanel() {
             const target = items[0];
 
             try {
-                await bot.pathfinder.goto(
+                await navigator.goto(
                     new goals.GoalNear(
                         target.position.x,
                         target.position.y,
@@ -2182,7 +2184,7 @@ async function runSetupPanel() {
         }
 
         try {
-            await bot.pathfinder.goto(
+            await navigator.goto(
                 new goals.GoalNear(
                     player.entity.position.x,
                     player.entity.position.y,
@@ -2241,7 +2243,7 @@ async function runSetupPanel() {
 
         equipWeapon();
 
-        bot.pathfinder.setGoal(
+        navigator.setGoal(
             new goals.GoalFollow(player.entity, 2),
             true
         );
@@ -2289,7 +2291,7 @@ async function runSetupPanel() {
         }
 
         if (!isFighting && !isFleeing) {
-            bot.pathfinder.setGoal(null);
+            navigator.setGoal(null);
         }
 
         markActivity();
@@ -2382,7 +2384,7 @@ async function runSetupPanel() {
             const z = guardBox.minZ + Math.floor(Math.random() * (guardBox.maxZ - guardBox.minZ + 1));
             const y = Math.floor(bot.entity.position.y);
 
-            bot.pathfinder.setGoal(new goals.GoalNear(x, y, z, 1));
+            navigator.setGoal(new goals.GoalNear(x, y, z, 1));
 
         }, GUARD_CHECK_INTERVAL);
 
@@ -2403,7 +2405,7 @@ async function runSetupPanel() {
         }
 
         if (!isFighting && !isFleeing) {
-            bot.pathfinder.setGoal(null);
+            navigator.setGoal(null);
         }
 
         markActivity();
@@ -2635,7 +2637,7 @@ async function runSetupPanel() {
             bot.pathfinder.setMovements(diggingMovements);
 
             try {
-                await bot.pathfinder.goto(new goals.GoalNear(x, y, z, 3));
+                await navigator.goto(new goals.GoalNear(x, y, z, 3));
             } catch (error) {
                 notify("Could not reach that block.");
                 return;
@@ -2716,7 +2718,7 @@ async function runSetupPanel() {
             if (bot.entity.position.distanceTo(pos) > 4.5) {
 
                 try {
-                    await bot.pathfinder.goto(new goals.GoalNear(x, y, z, 3));
+                    await navigator.goto(new goals.GoalNear(x, y, z, 3));
                 } catch (error) {
                     notify("Could not reach that position.");
                     return;
@@ -3049,7 +3051,7 @@ function setSkin(value, notify) {
                     0
                 );
 
-            bot.pathfinder.setGoal(
+            navigator.setGoal(
                 new goals.GoalBlock(
                     target.x,
                     target.y,
@@ -3259,7 +3261,7 @@ function setSkin(value, notify) {
                     const z = Math.floor(pos.z + Math.sin(angle) * distance);
                     const y = Math.floor(pos.y);
 
-                    bot.pathfinder.setGoal(
+                    navigator.setGoal(
                         new goals.GoalNear(x, y, z, 1)
                     );
 
@@ -3440,7 +3442,7 @@ function setSkin(value, notify) {
             resetTaskState();
 
             if (bot.pathfinder) {
-                bot.pathfinder.setGoal(null);
+                navigator.setGoal(null);
                 bot.pathfinder.setMovements(normalMovements || bot.pathfinder.movements);
             }
 
@@ -3479,9 +3481,19 @@ function setSkin(value, notify) {
             movements.allowSprinting = true;
             movements.allowParkour = true;
             movements.allowEntityDetection = true;
+            movements.allowFreeMotion = true;
+            movements.allow1by1towers = false;
             movements.canOpenDoors = true;
             movements.dontMineUnderFallingBlock = true;
             movements.dontCreateFlow = true;
+            movements.maxDropDown = 3;
+            movements.liquidCost = 4;
+            movements.entityCost = 3;
+            movements.blocksToAvoid.add(mcData.blocksByName.lava?.id);
+            movements.blocksToAvoid.add(mcData.blocksByName.fire?.id);
+            movements.blocksToAvoid.add(mcData.blocksByName.soul_fire?.id);
+            movements.blocksToAvoid.add(mcData.blocksByName.cactus?.id);
+            movements.blocksToAvoid.delete(undefined);
 
             // Let it bridge across gaps/water using cheap blocks it
             // actually carries, instead of getting stuck at the edge.
@@ -3524,6 +3536,20 @@ function setSkin(value, notify) {
             diggingMovements.dontMineUnderFallingBlock = true;
             diggingMovements.scaffoldingBlocks = movements.scaffoldingBlocks;
             diggingMovements.canDig = true;
+            diggingMovements.allowFreeMotion = true;
+            diggingMovements.maxDropDown = 3;
+            diggingMovements.liquidCost = 6;
+            diggingMovements.entityCost = 3;
+            diggingMovements.blocksToAvoid = new Set(movements.blocksToAvoid);
+
+            navigator = createNavigator({
+                bot,
+                goals,
+                normalMovements,
+                diggingMovements,
+                markActivity,
+                log
+            });
 
             log(
                 "[+] Pathfinder ready."
@@ -3854,7 +3880,7 @@ function setSkin(value, notify) {
                         return;
                     }
 
-                    bot.pathfinder.setGoal(
+                    navigator.setGoal(
                         new goals.GoalBlock(
                             x,
                             y,
@@ -3954,7 +3980,7 @@ function setSkin(value, notify) {
                     const y =
                         Math.floor(pos.y);
 
-                    bot.pathfinder.setGoal(
+                    navigator.setGoal(
                         new goals.GoalNear(
                             x,
                             y,
@@ -4318,7 +4344,7 @@ function setSkin(value, notify) {
                         return;
                     }
                     clearAllTasks();
-                    bot.pathfinder.setGoal(new goals.GoalFollow(target.entity, 2), true);
+                    navigator.setGoal(new goals.GoalFollow(target.entity, 2), true);
                     bot.chat("Following " + target.username + ".");
                     return;
                 }
@@ -4333,7 +4359,7 @@ function setSkin(value, notify) {
                         return;
                     }
                     clearAllTasks();
-                    bot.pathfinder.setGoal(new goals.GoalFollow(player.entity, 1), true);
+                    navigator.setGoal(new goals.GoalFollow(player.entity, 1), true);
                     bot.chat("Coming to " + player.username + ".");
                     return;
                 }
@@ -4345,7 +4371,7 @@ function setSkin(value, notify) {
                     }
                     const [x, y, z] = parts.map(Number);
                     clearAllTasks();
-                    bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
+                    navigator.setGoal(new goals.GoalBlock(x, y, z));
                     bot.chat("Going to " + x + " " + y + " " + z + ".");
                     return;
                 }
@@ -4468,7 +4494,7 @@ function setSkin(value, notify) {
                     await equipWeapon();
                     try {
                         if (bot.entity.position.distanceTo(target.entity.position) > 4) {
-                            bot.pathfinder.setGoal(new goals.GoalNear(
+                            navigator.setGoal(new goals.GoalNear(
                                 target.entity.position.x,
                                 target.entity.position.y,
                                 target.entity.position.z,
@@ -4540,7 +4566,7 @@ function setSkin(value, notify) {
                         bot.chat("Home '" + name + "' not found.");
                         return;
                     }
-                    bot.pathfinder.setGoal(new goals.GoalNear(home.x, home.y, home.z, 1));
+                    navigator.setGoal(new goals.GoalNear(home.x, home.y, home.z, 1));
                     bot.chat("Going to home '" + name + "'.");
                     return;
                 }
@@ -4711,7 +4737,7 @@ function setSkin(value, notify) {
                         bot.chat("Player not found: " + (target || ""));
                         return;
                     }
-                    bot.pathfinder.setGoal(new goals.GoalFollow(player.entity, 2), true);
+                    navigator.setGoal(new goals.GoalFollow(player.entity, 2), true);
                     bot.chat("Watching " + target + ".");
                     return;
                 }
@@ -4742,7 +4768,7 @@ function setSkin(value, notify) {
                             const p = bot.entity.position;
                             const x = Math.floor(p.x) + Math.floor(Math.random() * 25) - 12;
                             const z = Math.floor(p.z) + Math.floor(Math.random() * 25) - 12;
-                            bot.pathfinder.setGoal(new goals.GoalNear(x, Math.floor(p.y), z, 1));
+                            navigator.setGoal(new goals.GoalNear(x, Math.floor(p.y), z, 1));
                         }, 12000);
                     }
                     bot.chat("Autopilot on.");
@@ -4758,7 +4784,7 @@ function setSkin(value, notify) {
                     isMining = false;
                     isFarming = false;
                     isCollecting = false;
-                    bot.pathfinder.setGoal(null);
+                    navigator.setGoal(null);
                     bot.clearControlStates();
                     bot.chat("All tasks cleared.");
                     return;
@@ -5178,7 +5204,7 @@ function setSkin(value, notify) {
                     return;
                 }
 
-                bot.pathfinder.setGoal(
+                navigator.setGoal(
                     new goals.GoalBlock(
                         x,
                         y,
@@ -5249,7 +5275,7 @@ function setSkin(value, notify) {
                     return;
                 }
 
-                bot.pathfinder.setGoal(
+                navigator.setGoal(
                     new goals.GoalFollow(
                         nearest.entity,
                         2
@@ -5294,7 +5320,7 @@ function setSkin(value, notify) {
                     return;
                 }
 
-                bot.pathfinder.setGoal(
+                navigator.setGoal(
                     new goals.GoalFollow(
                         player.entity,
                         2
@@ -5389,7 +5415,7 @@ function setSkin(value, notify) {
                 const y =
                     Math.floor(pos.y);
 
-                bot.pathfinder.setGoal(
+                navigator.setGoal(
                     new goals.GoalNear(
                         x,
                         y,
@@ -5732,7 +5758,7 @@ function setSkin(value, notify) {
                 isFarming = false;
                 isCollecting = false;
 
-                bot.pathfinder.setGoal(
+                navigator.setGoal(
                     null
                 );
 
