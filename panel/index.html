@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Aydream Control</title>
+  <link rel="stylesheet" href="/panel/style.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">MINEFLAYER CONTROL</p>
+        <h1>Aydream</h1>
+        <p class="sub">Start the bot when you need it. GitHub Actions provides the runtime.</p>
+      </div>
+      <div id="statusPill" class="pill offline">OFFLINE</div>
+    </section>
+
+    <section class="grid">
+      <article class="card status-card">
+        <div class="card-head">
+          <div>
+            <p class="label">RUNTIME</p>
+            <h2 id="statusText">Offline</h2>
+          </div>
+          <div id="runNumber" class="run-number">—</div>
+        </div>
+
+        <div class="timer">
+          <span id="timerValue">—</span>
+          <small>session</small>
+        </div>
+
+        <div class="actions">
+          <button id="startButton" class="primary">Start</button>
+          <button id="stopButton" class="danger">Stop</button>
+          <button id="restartButton" class="secondary">Restart</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <div>
+            <p class="label">RUN</p>
+            <h2>Activity</h2>
+          </div>
+          <button id="refreshButton" class="icon-button">Refresh</button>
+        </div>
+
+        <div class="facts">
+          <div><span>Status</span><strong id="runStatus">—</strong></div>
+          <div><span>Conclusion</span><strong id="runConclusion">—</strong></div>
+          <div><span>Started</span><strong id="runStarted">—</strong></div>
+          <div><span>Updated</span><strong id="runUpdated">—</strong></div>
+        </div>
+
+        <a id="githubLink" class="github-link" href="#" target="_blank" rel="noreferrer">Open GitHub run</a>
+      </article>
+
+      <article class="card logs-card">
+        <div class="card-head">
+          <div>
+            <p class="label">LOGS</p>
+            <h2>Runner output</h2>
+          </div>
+        </div>
+        <div id="logs" class="logs">
+          <div class="empty">No run yet.</div>
+        </div>
+      </article>
+    </section>
+
+    <section id="setup" class="setup card">
+      <div>
+        <p class="label">FIRST SETUP</p>
+        <h2>Panel key</h2>
+        <p>Enter the private key configured as PANEL_KEY in Vercel. It stays in this browser only.</p>
+      </div>
+      <div class="key-row">
+        <input id="keyInput" type="password" autocomplete="off" placeholder="Panel key">
+        <button id="saveKey" class="primary">Save</button>
+      </div>
+    </section>
+
+    <div id="toast" class="toast"></div>
+  </main>
+
+  <script src="/panel/app.js"></script>
+</body>
+</html>
