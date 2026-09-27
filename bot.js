@@ -383,6 +383,21 @@ async function runSetupPanel() {
                 return;
             }
 
+            if (req.method === "GET" && req.url === "/api/inventory") {
+                res.writeHead(200);
+                res.end(JSON.stringify({
+                    items: bot?.inventory?.items?.().map(item => ({
+                        name: item.name,
+                        count: item.count
+                    })) || [],
+                    held: bot?.heldItem ? {
+                        name: bot.heldItem.name,
+                        count: bot.heldItem.count
+                    } : null
+                }));
+                return;
+            }
+
             if (req.method === "POST" && req.url === "/api/action") {
                 let body = "";
                 req.on("data", chunk => {
