@@ -30,4 +30,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node --check bot.js
+      - run: node --check lib/api-security.js
+      - run: node --check lib/navigation.js
+      - run: node --check lib/setup-input.js
+      - run: node --check api/_github.js
+      - run: node --check api/logs.js
+      - run: node --check api/start.js
+      - run: node --check api/status.js
+      - run: node --check api/stop.js
+      - run: node --check panel/app.js
       - run: npm test
