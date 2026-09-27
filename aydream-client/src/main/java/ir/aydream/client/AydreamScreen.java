@@ -285,6 +285,7 @@ public class AydreamScreen extends Screen {
     }
 
     private void buildInventory() {
+        if (inventoryItems.isEmpty()) refreshInventory();
         int left = 215;
         int top = 92;
 
