@@ -154,7 +154,7 @@ public class AydreamScreen extends Screen {
             Entry entry = entries.get(i);
             int col = (i - start) % 2;
             int row = (i - start) / 2;
-            addButton(left + col * 205, top + row * 34, 195, 28, entry.label, () -> send(entry.command));
+            addButton(left + col * 205, top + row * 34, 195, 28, entry.label, () -> apiAction(entry.command));
         }
 
         if (start > 0) {
