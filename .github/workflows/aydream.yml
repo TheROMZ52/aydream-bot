@@ -1,0 +1,46 @@
+name: Aydream Runner
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aydream-runner
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: Aydream
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start Aydream
+        env:
+          AYDREAM_HOST: ${{ secrets.AYDREAM_HOST }}
+          AYDREAM_PORT: ${{ secrets.AYDREAM_PORT }}
+          AYDREAM_USERNAME: ${{ secrets.AYDREAM_USERNAME }}
+          AYDREAM_VERSION: ${{ secrets.AYDREAM_VERSION }}
+          AYDREAM_CONTROLLER: ${{ secrets.AYDREAM_CONTROLLER }}
+          AYDREAM_PASSWORD: ${{ secrets.AYDREAM_PASSWORD }}
+        run: |
+          printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
+            "$AYDREAM_HOST" \
+            "$AYDREAM_PORT" \
+            "$AYDREAM_USERNAME" \
+            "$AYDREAM_VERSION" \
+            "$AYDREAM_CONTROLLER" \
+            "$AYDREAM_PASSWORD" | node bot.js
