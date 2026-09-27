@@ -199,7 +199,6 @@ public class AydreamScreen extends Screen {
         tokenField = new TextFieldWidget(textRenderer, left, top + 58, w, 22, Text.literal("API Token"));
         tokenField.setMaxLength(200);
         tokenField.setText(apiToken);
-        tokenField.setRenderTextProvider((text, firstCharacterIndex) -> text.substring(firstCharacterIndex).replaceAll(".", "*"));
         addDrawableChild(tokenField);
 
         addButton(left, top + 105, 130, 28, "Save", this::saveConfig);
