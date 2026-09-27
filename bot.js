@@ -2053,7 +2053,7 @@ async function runSetupPanel() {
     // there's nothing left to pick up (auto-pickup on touch).
     // ============================================
 
-    async function collectItemsInArea(x1, y1, z1, x2, y2, z2, notify) {
+    async function collectItemsInArea(x1, y1, z1, x2, y2, z2, notify, shouldContinue = () => true) {
 
         const box = normalizeBox(x1, y1, z1, x2, y2, z2);
 
@@ -2066,7 +2066,7 @@ async function runSetupPanel() {
 
         notify("Collecting items in the area...");
 
-        while (isCollecting) {
+        while (isCollecting && shouldContinue()) {
 
             const items =
                 Object.values(bot.entities).filter((entity) =>
@@ -2832,52 +2832,57 @@ function setSkin(value, notify) {
 
         depositInProgress = true;
 
-        const chest = bot.findBlock({
-            matching: (block) =>
-                block &&
-                (
-                    block.name === "chest" ||
-                    block.name === "trapped_chest" ||
-                    block.name === "barrel"
-                ),
-            maxDistance: AUTO_DEPOSIT_RADIUS
-        });
-
-        if (!chest) return false;
-
-        let container = null;
-
         try {
-            container = await bot.openContainer(chest);
-            let moved = 0;
+            const chest = bot.findBlock({
+                matching: (block) =>
+                    block &&
+                    (
+                        block.name === "chest" ||
+                        block.name === "trapped_chest" ||
+                        block.name === "barrel"
+                    ),
+                maxDistance: AUTO_DEPOSIT_RADIUS
+            });
 
-            for (const item of [...bot.inventory.items()]) {
-                if (isProtectedInventoryItem(item)) continue;
+            if (!chest) return false;
 
-                try {
-                    await container.deposit(item.type, item.metadata ?? null, item.count);
-                    moved += item.count;
-                } catch (error) {
-                    break;
+            let container = null;
+
+            try {
+                container = await bot.openContainer(chest);
+                let moved = 0;
+
+                for (const item of [...bot.inventory.items()]) {
+                    if (isProtectedInventoryItem(item)) continue;
+
+                    try {
+                        await container.deposit(item.type, item.metadata ?? null, item.count);
+                        moved += item.count;
+                    } catch (error) {
+                        break;
+                    }
+                }
+
+                if (container) {
+                    try { container.close(); } catch (error) {}
+                }
+
+                if (moved > 0) {
+                    markActivity();
+                    log("[+] Auto-deposited " + moved + " items.");
+                    return true;
+                }
+            } catch (error) {
+                if (container) {
+                    try { container.close(); } catch (closeError) {}
                 }
             }
 
-            container.close();
-
-            if (moved > 0) {
-                markActivity();
-                log("[+] Auto-deposited " + moved + " items.");
-                return true;
-            }
-        } catch (error) {
-            if (container) {
-                try { container.close(); } catch (closeError) {}
-            }
+            return false;
+        } finally {
+            depositInProgress = false;
         }
-
-        return false;
     }
-
     // ============================================
     // Hazard Detection
     // ============================================
