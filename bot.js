@@ -308,8 +308,9 @@ async function runSetupPanel() {
     let reconnectTimer = null;
     let backgroundLoopsStarted = false;
     const controlTimers = new Set();
-    const API_PORT = Number(process.env.AYDREAM_API_PORT || 31880);
-    const API_HOST = process.env.AYDREAM_API_HOST || "127.0.0.1";
+    const parsedApiPort = Number(process.env.AYDREAM_API_PORT || 31880);
+    const API_PORT = Number.isInteger(parsedApiPort) && parsedApiPort >= 1 && parsedApiPort <= 65535 ? parsedApiPort : 31880;
+    const API_HOST = "127.0.0.1";
     function getApiStatus() {
         const entity = bot && bot.entity;
         const position = entity ? {
@@ -408,9 +409,9 @@ async function runSetupPanel() {
                     try {
                         const data = JSON.parse(body || "{}");
                         const command = typeof data.command === "string" ? data.command.trim() : "";
-                        if (!command || !bot) {
+                        if (!command || !bot || !bot.entity) {
                             res.writeHead(400);
-                            res.end(JSON.stringify({ error: "invalid command" }));
+                            res.end(JSON.stringify({ error: "bot is offline or command is invalid" }));
                             return;
                         }
 
@@ -420,10 +421,15 @@ async function runSetupPanel() {
                             return;
                         }
 
-                        bot.chat(command);
-                        markActivity();
-                        res.writeHead(200);
-                        res.end(JSON.stringify({ ok: true }));
+                        try {
+                            bot.chat(command);
+                            markActivity();
+                            res.writeHead(200);
+                            res.end(JSON.stringify({ ok: true }));
+                        } catch (error) {
+                            res.writeHead(503);
+                            res.end(JSON.stringify({ error: "bot is offline" }));
+                        }
                     } catch (error) {
                         res.writeHead(400);
                         res.end(JSON.stringify({ error: "invalid json" }));
