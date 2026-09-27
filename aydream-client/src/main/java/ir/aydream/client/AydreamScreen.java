@@ -4,12 +4,16 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.Text;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,8 +22,11 @@ public class AydreamScreen extends Screen {
     private final Screen parent;
     private String category = "dashboard";
     private int page = 0;
-    private static final String API_BASE_URL = "http://127.0.0.1:31880";
-    private static final String API_TOKEN = "PUT_YOUR_TOKEN_HERE";
+    private String apiBaseUrl = "http://127.0.0.1:31880";
+    private String apiToken = "";
+    private TextFieldWidget urlField;
+    private TextFieldWidget tokenField;
+    private String settingsMessage = "";
     private final HttpClient apiClient = HttpClient.newHttpClient();
     private volatile boolean apiOnline = false;
     private volatile String botTask = "offline";
@@ -43,6 +50,7 @@ public class AydreamScreen extends Screen {
     @Override
     protected void init() {
         clearChildren();
+        loadConfig();
 
         if (category.equals("dashboard")) {
             buildDashboard();
@@ -71,14 +79,15 @@ public class AydreamScreen extends Screen {
 
         addButton(panelX + 25, panelY + 170, 285, 30, "Quick Follow", () -> apiAction("!follow"));
         addButton(panelX + 325, panelY + 170, 285, 30, "Stop Everything", () -> apiAction("!clear"));
+        addButton(panelX + 25, panelY + 208, 285, 30, "Settings", () -> open("settings"));
     }
 
     private void buildSidebar() {
         int x = 28;
         int y = 65;
 
-        String[] labels = {"Dashboard", "Movement", "Combat", "Homes", "Automation", "Inventory", "Info"};
-        String[] values = {"dashboard", "movement", "combat", "homes", "automation", "inventory", "info"};
+        String[] labels = {"Dashboard", "Movement", "Combat", "Homes", "Automation", "Inventory", "Info", "Settings"};
+        String[] values = {"dashboard", "movement", "combat", "homes", "automation", "inventory", "info", "settings"};
 
         for (int i = 0; i < labels.length; i++) {
             String value = values[i];
@@ -89,6 +98,11 @@ public class AydreamScreen extends Screen {
     private void buildCategory() {
         int left = 215;
         int top = 82;
+        if (category.equals("settings")) {
+            buildSettings();
+            return;
+        }
+
         List<Entry> entries = new ArrayList<>();
 
         switch (category) {
@@ -172,6 +186,83 @@ public class AydreamScreen extends Screen {
         }
     }
 
+    private void buildSettings() {
+        int left = 235;
+        int top = 98;
+        int w = Math.min(430, width - left - 40);
+
+        urlField = new TextFieldWidget(textRenderer, left, top, w, 22, Text.literal("Bot API URL"));
+        urlField.setMaxLength(200);
+        urlField.setText(apiBaseUrl);
+        addDrawableChild(urlField);
+
+        tokenField = new TextFieldWidget(textRenderer, left, top + 58, w, 22, Text.literal("API Token"));
+        tokenField.setMaxLength(200);
+        tokenField.setText(apiToken);
+        tokenField.setRenderTextProvider((text, firstCharacterIndex) -> text.substring(firstCharacterIndex).replaceAll(".", "*"));
+        addDrawableChild(tokenField);
+
+        addButton(left, top + 105, 130, 28, "Save", this::saveConfig);
+        addButton(left + 140, top + 105, 130, 28, "Test", this::testConnection);
+        addButton(left + 280, top + 105, 130, 28, "Reset", this::resetConfig);
+
+        contextText = "Only localhost is supported. The bot must run on this same PC.";
+    }
+
+    private String contextText = "";
+
+    private Path configPath() {
+        return MinecraftClient.getInstance().runDirectory.toPath().resolve("config").resolve("aydream-client.properties");
+    }
+
+    private void loadConfig() {
+        try {
+            Path path = configPath();
+            if (!Files.exists(path)) return;
+            java.util.Properties properties = new java.util.Properties();
+            try (var input = Files.newInputStream(path)) {
+                properties.load(input);
+            }
+            apiBaseUrl = properties.getProperty("api.url", "http://127.0.0.1:31880").trim();
+            apiToken = properties.getProperty("api.token", "").trim();
+        } catch (Exception ignored) {
+            apiBaseUrl = "http://127.0.0.1:31880";
+            apiToken = "";
+        }
+    }
+
+    private void saveConfig() {
+        if (urlField != null) apiBaseUrl = urlField.getText().trim();
+        if (tokenField != null) apiToken = tokenField.getText().trim();
+        if (apiBaseUrl.isBlank()) apiBaseUrl = "http://127.0.0.1:31880";
+        try {
+            Path path = configPath();
+            Files.createDirectories(path.getParent());
+            java.util.Properties properties = new java.util.Properties();
+            properties.setProperty("api.url", apiBaseUrl);
+            properties.setProperty("api.token", apiToken);
+            try (var output = Files.newOutputStream(path, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                properties.store(output, "Aydream Client");
+            }
+            settingsMessage = "Saved";
+        } catch (Exception error) {
+            settingsMessage = "Save failed";
+        }
+    }
+
+    private void resetConfig() {
+        apiBaseUrl = "http://127.0.0.1:31880";
+        apiToken = "";
+        settingsMessage = "Reset";
+        init();
+    }
+
+    private void testConnection() {
+        saveConfig();
+        refreshStatus();
+        settingsMessage = "Testing...";
+    }
+
     private void open(String value) {
         category = value;
         page = 0;
@@ -189,8 +280,8 @@ public class AydreamScreen extends Screen {
     private void apiAction(String command) {
         String json = "{\"command\":\"" + command.replace("\\", "\\\\").replace("\"", "\\\"") + "\"}";
         HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(API_BASE_URL + "/api/action"))
-            .header("Authorization", "Bearer " + API_TOKEN)
+            .uri(URI.create(apiBaseUrl + "/api/action"))
+            .header("Authorization", "Bearer " + apiToken)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json))
             .build();
@@ -202,7 +293,7 @@ public class AydreamScreen extends Screen {
         if (now < nextRefresh) return;
         nextRefresh = now + 1000L;
         HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(API_BASE_URL + "/api/status"))
+            .uri(URI.create(apiBaseUrl + "/api/status"))
             .header("Authorization", "Bearer " + API_TOKEN)
             .GET()
             .build();
@@ -213,6 +304,7 @@ public class AydreamScreen extends Screen {
             }
             String body = response.body();
             apiOnline = true;
+            settingsMessage = "Connected";
             botHealth = value(body, "health");
             botFood = value(body, "food");
             botTask = value(body, "task");
@@ -280,6 +372,11 @@ public class AydreamScreen extends Screen {
             context.drawText(textRenderer, Text.literal("POS  " + botPosition), mainX + 25, mainY + 238, MUTED, false);
         } else {
             context.drawText(textRenderer, Text.literal(category.toUpperCase()), mainX + 24, mainY + 62, MUTED, true);
+            if (category.equals("settings")) {
+                context.drawText(textRenderer, Text.literal("LOCAL ONLY"), mainX + 24, mainY + 82, ACCENT, true);
+                context.drawText(textRenderer, Text.literal(contextText), mainX + 24, mainY + 235, MUTED, false);
+                context.drawText(textRenderer, Text.literal(settingsMessage), mainX + mainW - 110, mainY + 62, apiOnline ? 0xFF7CFFB2 : MUTED, false);
+            }
         }
 
         context.drawText(textRenderer, Text.literal("/dream"), 24, height - 28, MUTED, false);
