@@ -634,7 +634,8 @@ async function runSetupPanel() {
 
                 if (
                     entity.type === "player" &&
-                    entity.username !== bot.username
+                    entity.username !== bot.username &&
+                    entity.username !== CONTROLLER
                 ) {
 
                     return true;
@@ -3056,6 +3057,23 @@ function setSkin(value, notify) {
         // ====================================
         // Spawn
         // ====================================
+
+        bot.on("death", () => {
+
+            log("[!] Bot died. Resetting active tasks until respawn.");
+
+            resetTaskState();
+
+            if (bot.pathfinder) {
+                bot.pathfinder.setGoal(null);
+                bot.pathfinder.setMovements(normalMovements || bot.pathfinder.movements);
+            }
+
+            if (bot.clearControlStates) {
+                bot.clearControlStates();
+            }
+
+        });
 
         bot.once("spawn", () => {
 
