@@ -768,6 +768,106 @@ async function runSetupPanel() {
         return advancedSystems.formatDuration(advancedSystems.uptimeSeconds());
     }
 
+    let patrolLoopActive = false;
+    let patrolLoopPromise = null;
+
+    async function runPatrol(notify) {
+        if (patrolLoopActive) return;
+        const points = advancedSystems.getPatrolPoints();
+        if (points.length < 2) {
+            notify("Patrol needs at least 2 points.");
+            return;
+        }
+        patrolLoopActive = true;
+        patrolLoopPromise = (async () => {
+            let index = 0;
+            while (patrolLoopActive && bot?.entity) {
+                const point = points[index % points.length];
+                try {
+                    await navigator.goto(new goals.GoalNear(point.x, point.y, point.z, 1), { maxRetries: 4 });
+                    index++;
+                } catch {
+                    index++;
+                }
+                await sleep(500);
+            }
+        })().finally(() => {
+            patrolLoopActive = false;
+            patrolLoopPromise = null;
+        });
+    }
+
+    function stopPatrol() {
+        patrolLoopActive = false;
+        if (navigator) navigator.stop();
+    }
+
+    async function stripMine(direction, targetName, length, notify) {
+        if (!bot?.entity || !mcData) return;
+        const vectors = {
+            north: new Vec3(0, 0, -1),
+            south: new Vec3(0, 0, 1),
+            east: new Vec3(1, 0, 0),
+            west: new Vec3(-1, 0, 0)
+        };
+        const dir = vectors[String(direction || "").toLowerCase()];
+        if (!dir) {
+            notify("Direction must be north, south, east or west.");
+            return;
+        }
+        const wanted = String(targetName || "").toLowerCase();
+        const maxSteps = Math.max(1, Math.min(1000, Number(length) || 100));
+        notify("Strip mine started toward " + direction + " for " + maxSteps + " blocks.");
+        isMining = true;
+        try {
+            for (let step = 0; step < maxSteps && isMining && bot.entity; step++) {
+                const base = bot.entity.position.floored().plus(dir);
+                const blocks = [bot.blockAt(base), bot.blockAt(base.offset(0, 1, 0))];
+                if (blocks.some((block) => block?.name?.toLowerCase() === wanted)) {
+                    notify("Found " + wanted + " near " + base.x + " " + base.y + " " + base.z + ".");
+                    return;
+                }
+                for (const block of blocks) {
+                    if (!isMining || !block || block.name === "air" || block.name === "cave_air" || block.name === "bedrock") continue;
+                    if (block.name.includes("lava") || block.name.includes("water")) {
+                        notify("Stopped before dangerous fluid.");
+                        return;
+                    }
+                    if (!isWorthKeepingBlock(block.name)) continue;
+                    await equipBestTool(block);
+                    try {
+                        await bot.dig(block, true);
+                        advancedSystems.record("blocksMined", 1);
+                    } catch {}
+                }
+                try {
+                    await navigator.goto(new goals.GoalNear(base.x, base.y, base.z, 1), { maxRetries: 2 });
+                } catch {
+                    notify("Strip mine got stuck at " + base.x + " " + base.y + " " + base.z + ".");
+                    return;
+                }
+            }
+        } finally {
+            isMining = false;
+        }
+        notify("Strip mine finished.");
+    }
+
+    async function runFarmGroup(name, notify) {
+        const group = advancedSystems.getFarmGroup(name);
+        if (!group) {
+            notify("Farm group not found.");
+            return;
+        }
+        for (const box of group.boxes) {
+            if (!bot?.entity) break;
+            await farmArea(box.x1, box.y1, box.z1, box.x2, box.y2, box.z2, notify);
+        }
+        notify("Farm group '" + name + "' finished.");
+    }
+
+
+
 
 
     function isBusy() {
@@ -805,6 +905,7 @@ async function runSetupPanel() {
         }
 
         stopGuard();
+        stopPatrol();
 
         if (combatSwingTimer) {
             clearInterval(combatSwingTimer);
@@ -3901,6 +4002,76 @@ function setSkin(value, notify) {
                 // GOTO
                 // ====================================
 
+                if (command === "stripmine") {
+                    if (parts.length < 2) {
+                        bot.chat("Usage: !stripmine <north|south|east|west> <block> [length]");
+                        return;
+                    }
+                    stripMine(parts[0], parts[1], parts[2] || 100, (msg) => bot.chat(msg));
+                    return;
+                }
+
+                if (command === "patrol") {
+                    const sub = parts.shift()?.toLowerCase();
+                    if (sub === "add") {
+                        if (!parts[0] || !bot.entity) return bot.chat("Usage: !patrol add <name>");
+                        advancedSystems.addPatrolPoint(parts[0], bot.entity.position);
+                        bot.chat("Patrol point '" + parts[0] + "' saved.");
+                        return;
+                    }
+                    if (sub === "remove") {
+                        bot.chat(advancedSystems.removePatrolPoint(parts[0]) ? "Patrol point removed." : "Patrol point not found.");
+                        return;
+                    }
+                    if (sub === "list") {
+                        bot.chat(advancedSystems.getPatrolPoints().map((p) => p.name).join(", ") || "No patrol points.");
+                        return;
+                    }
+                    if (sub === "start") {
+                        runPatrol((msg) => bot.chat(msg));
+                        return;
+                    }
+                    if (sub === "stop") {
+                        stopPatrol();
+                        bot.chat("Patrol stopped.");
+                        return;
+                    }
+                    bot.chat("Usage: !patrol <add|remove|list|start|stop> [name]");
+                    return;
+                }
+
+                if (command === "farmgroup") {
+                    const sub = parts.shift()?.toLowerCase();
+                    if (sub === "add") {
+                        if (parts.length !== 7 || parts.slice(1).some((p) => Number.isNaN(Number(p)))) {
+                            bot.chat("Usage: !farmgroup add <name> <x1> <y1> <z1> <x2> <y2> <z2>");
+                            return;
+                        }
+                        const name = parts.shift();
+                        const values = parts.map(Number);
+                        const existing = advancedSystems.getFarmGroup(name);
+                        const boxes = existing ? existing.boxes : [];
+                        boxes.push({ x1: values[0], y1: values[1], z1: values[2], x2: values[3], y2: values[4], z2: values[5] });
+                        advancedSystems.setFarmGroup(name, boxes);
+                        bot.chat("Farm box added to '" + name + "'.");
+                        return;
+                    }
+                    if (sub === "run") {
+                        runFarmGroup(parts[0], (msg) => bot.chat(msg));
+                        return;
+                    }
+                    if (sub === "list") {
+                        bot.chat(advancedSystems.listFarmGroups().map((g) => g.name).join(", ") || "No farm groups.");
+                        return;
+                    }
+                    if (sub === "delete") {
+                        bot.chat(advancedSystems.deleteFarmGroup(parts[0]) ? "Farm group deleted." : "Farm group not found.");
+                        return;
+                    }
+                    bot.chat("Usage: !farmgroup <add|run|list|delete> ...");
+                    return;
+                }
+
                 if (command === "goto") {
 
                     if (parts.length !== 3) {
@@ -4869,6 +5040,7 @@ function setSkin(value, notify) {
                     stopFleeing();
                     stopHunting();
                     stopGuard();
+                    stopPatrol();
                     isEscapingHazard = false;
                     isMining = false;
                     isFarming = false;
