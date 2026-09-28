@@ -605,7 +605,7 @@ public class AydreamScreen extends Screen {
         while (cursor < section.length()) {
             int nameStart = section.indexOf("\"name\":\"", cursor);
             if (nameStart < 0) break;
-            nameStart += 9;
+            nameStart += 8;
             int nameEnd = section.indexOf("\"", nameStart);
             if (nameEnd < 0) break;
             String name = section.substring(nameStart, nameEnd);
@@ -627,7 +627,7 @@ public class AydreamScreen extends Screen {
         List<String> result = new ArrayList<>();
         int start = json.indexOf("\"homes\":{");
         if (start < 0) return result;
-        start += 8;
+        start += 9;
         int end = json.lastIndexOf("}}");
         if (end < start) end = json.length();
         String section = json.substring(start, end);
