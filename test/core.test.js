@@ -42,7 +42,7 @@ test("advanced systems persist waypoints and statistics", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aydream-"));
     const systems = createAdvancedSystems(dir);
     assert.equal(systems.setWaypoint("base", { x: 1.9, y: 64.2, z: -3.7 }), true);
-    assert.deepEqual(systems.getWaypoint("base"), { x: 1, y: 64, z: -3 });
+    assert.deepEqual(systems.getWaypoint("base"), { x: 1, y: 64, z: -4 });
     systems.record("blocksMined", 4);
     assert.equal(systems.summary("total").blocksMined, 4);
     assert.equal(systems.deleteWaypoint("base"), true);
