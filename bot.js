@@ -4445,6 +4445,31 @@ function setSkin(value, notify) {
                             bot.whisper(username, "I cannot complete the requested side yet.");
                             return;
                         }
+                        const targetPlayer = bot.players[username];
+                        if (!targetPlayer || !targetPlayer.entity) {
+                            bot.whisper(username, "Come closer to the bot so I can safely deliver the trade.");
+                            return;
+                        }
+
+                        const tradeRange = 4;
+                        const initialDistance = bot.entity.position.distanceTo(targetPlayer.entity.position);
+                        if (initialDistance > tradeRange) {
+                            bot.whisper(username, "You are too far away. Come within " + tradeRange + " blocks, then accept the trade again.");
+                            return;
+                        }
+
+                        const deliveryPlayer = bot.players[username];
+                        if (!deliveryPlayer || !deliveryPlayer.entity) {
+                            bot.whisper(username, "Come closer to the bot so I can safely deliver the trade.");
+                            return;
+                        }
+
+                        const finalDistance = bot.entity.position.distanceTo(deliveryPlayer.entity.position);
+                        if (finalDistance > tradeRange) {
+                            bot.whisper(username, "You moved too far away. Come within " + tradeRange + " blocks, then accept the trade again.");
+                            return;
+                        }
+
                         try {
                             await bot.toss(give.type, give.metadata ?? null, request.giveCount);
                             pendingTrades.delete(username.toLowerCase());
