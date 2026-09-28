@@ -3025,63 +3025,102 @@ function setSkin(value, notify) {
     let depositInProgress = false;
 
     async function depositInventoryIfNeeded(force = false) {
-        if (depositInProgress) return false;
-        if (!bot || !bot.entity || !bot.inventory) return false;
+        if (depositInProgress || !bot?.entity || !bot.inventory) return false;
         if (!force && !isInventoryNearFull()) return false;
-
         depositInProgress = true;
 
         try {
-            const chest = bot.findBlock({
-                matching: (block) =>
-                    block &&
-                    (
-                        block.name === "chest" ||
-                        block.name === "trapped_chest" ||
-                        block.name === "barrel"
-                    ),
-                maxDistance: AUTO_DEPOSIT_RADIUS
+            const positions = bot.findBlocks({
+                matching: (block) => block && ["chest", "trapped_chest", "barrel"].includes(block.name),
+                maxDistance: AUTO_DEPOSIT_RADIUS,
+                count: 16
             });
+            if (!positions.length) {
+                log("[WARN] Inventory needs space but no nearby container was found.");
+                return false;
+            }
 
-            if (!chest) return false;
-
-            let container = null;
-
-            try {
-                container = await bot.openContainer(chest);
-                let moved = 0;
-
-                for (const item of [...bot.inventory.items()]) {
-                    if (isProtectedInventoryItem(item)) continue;
-
-                    try {
-                        await container.deposit(item.type, item.metadata ?? null, item.count);
-                        moved += item.count;
-                    } catch (error) {
-                        break;
+            const containers = [];
+            for (const position of positions) {
+                const block = bot.blockAt(position);
+                if (!block) continue;
+                let window = null;
+                try {
+                    window = await bot.openContainer(block);
+                    const categories = new Map();
+                    for (const item of window.containerItems()) {
+                        const category = inventoryCategory(item);
+                        categories.set(category, (categories.get(category) || 0) + item.count);
                     }
-                }
-
-                if (container) {
-                    try { container.close(); } catch (error) {}
-                }
-
-                if (moved > 0) {
-                    markActivity();
-                    log("[+] Auto-deposited " + moved + " items.");
-                    return true;
-                }
-            } catch (error) {
-                if (container) {
-                    try { container.close(); } catch (closeError) {}
+                    containers.push({ position, categories });
+                } catch {}
+                finally {
+                    if (window) {
+                        try { window.close(); } catch {}
+                    }
                 }
             }
 
+            const categoryTotals = new Map();
+            for (const item of bot.inventory.items()) {
+                if (!isProtectedInventoryItem(item)) {
+                    const category = inventoryCategory(item);
+                    categoryTotals.set(category, (categoryTotals.get(category) || 0) + item.count);
+                }
+            }
+
+            let moved = 0;
+            let failed = 0;
+            const opened = new Map();
+
+            for (const item of [...bot.inventory.items()]) {
+                if (isProtectedInventoryItem(item)) continue;
+                const category = inventoryCategory(item);
+                const ranked = containers
+                    .map((entry) => ({
+                        entry,
+                        score: (entry.categories.get(category) || 0) - (entry.categories.get("misc") || 0)
+                    }))
+                    .sort((a, b) => b.score - a.score);
+
+                const target = ranked[0]?.entry;
+                if (!target) {
+                    failed++;
+                    continue;
+                }
+
+                let window = opened.get(target.position.toString());
+                try {
+                    if (!window) {
+                        const block = bot.blockAt(target.position);
+                        window = await bot.openContainer(block);
+                        opened.set(target.position.toString(), window);
+                    }
+                    await window.deposit(item.type, item.metadata ?? null, item.count);
+                    moved += item.count;
+                    target.categories.set(category, (target.categories.get(category) || 0) + item.count);
+                } catch {
+                    failed++;
+                }
+            }
+
+            for (const window of opened.values()) {
+                try { await window.close(); } catch {}
+            }
+
+            if (failed > 0) log("[WARN] " + failed + " inventory stack(s) could not be deposited; a container may be full.");
+            if (moved > 0) {
+                advancedSystems.record("itemsDeposited", moved);
+                markActivity();
+                log("[+] Auto-sorted " + moved + " items into nearby containers.");
+                return true;
+            }
             return false;
         } finally {
             depositInProgress = false;
         }
     }
+
     // ============================================
     // Hazard Detection
     // ============================================
