@@ -4415,13 +4415,13 @@ function setSkin(value, notify) {
                             bot.whisper(username, "No valid pending trade.");
                             return;
                         }
-                        const give = bot.inventory.items().find((item) => item.name === request.wantItem);
-                        if (!give || give.count < request.wantCount) {
+                        const give = bot.inventory.items().find((item) => item.name === request.giveItem);
+                        if (!give || give.count < request.giveCount) {
                             bot.whisper(username, "I cannot complete the requested side yet.");
                             return;
                         }
                         try {
-                            await bot.toss(give.type, give.metadata ?? null, request.wantCount);
+                            await bot.toss(give.type, give.metadata ?? null, request.giveCount);
                             pendingTrades.delete(username.toLowerCase());
                             bot.whisper(username, "Trade side delivered. Please send your agreed item.");
                         } catch {
