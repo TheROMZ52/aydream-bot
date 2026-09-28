@@ -440,6 +440,7 @@ async function runSetupPanel() {
     let forceImmediateReconnect = false;
     let reconnectAttempts = 0;
     let reconnectTimer = null;
+    let hasConnectedOnce = false;
     let backgroundLoopsStarted = false;
     const controlTimers = new Set();
     const parsedApiPort = Number(process.env.AYDREAM_API_PORT || 31880);
@@ -3499,7 +3500,6 @@ function setSkin(value, notify) {
         }
 
         reconnectAttempts++;
-        advancedSystems.recordReconnect();
 
         const delay =
             Math.min(
@@ -3556,6 +3556,9 @@ function setSkin(value, notify) {
     // ============================================
 
     function connect() {
+
+        if (hasConnectedOnce) advancedSystems.recordReconnect();
+        hasConnectedOnce = true;
 
         log(
             `[*] Connecting to ${HOST}:${PORT} as ${USERNAME}...`
