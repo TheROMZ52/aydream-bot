@@ -24,7 +24,7 @@ test("persistent advanced systems keep waypoints and stats", () => {
     const path = require("node:path");
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aydream-"));
     const systems = createAdvancedSystems(dir);
-    assert.equal(systems.setWaypoint("mine", { x: 1.8, y: 64.9, z: -3.2 }), true);
+    assert.equal(systems.setWaypoint("mine", { x: 1.8, y: 64.9, z: -4.2 }), true);
     assert.deepEqual(systems.getWaypoint("mine"), { x: 1, y: 64, z: -3 });
     systems.record("blocksMined", 4);
     assert.equal(systems.summary("total").blocksMined, 4);
