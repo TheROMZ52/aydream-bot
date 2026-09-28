@@ -753,6 +753,13 @@ async function runSetupPanel() {
         }
     }
 
+    function reportInventoryWarnings() {
+        if (!bot?.inventory) return;
+        const slots = bot.inventory.slots?.slice(9, 45) || [];
+        const empty = slots.filter((slot) => !slot).length;
+        if (empty <= 2) log("[WARN] Inventory almost full: " + empty + " empty slots.");
+    }
+
     function reportGearWarnings() {
         if (!bot?.inventory) return;
         for (const item of bot.inventory.items()) {
@@ -3525,6 +3532,7 @@ function setSkin(value, notify) {
         startAutoDepositWatch();
         setInterval(() => {
             if (!bot?.entity || isBusy()) return;
+            reportInventoryWarnings();
             reportGearWarnings();
             autoEquipBestGear();
         }, 10000);
@@ -4554,6 +4562,13 @@ function setSkin(value, notify) {
 
                 if (command === "uptime") {
                     bot.chat("Uptime: " + formatUptime() + " | reconnects: " + advancedSystems.summary("total").reconnects);
+                    return;
+                }
+
+                if (command === "report") {
+                    const period = parts[0] === "daily" || parts[0] === "weekly" ? parts[0] : "daily";
+                    const data = advancedSystems.summary(period);
+                    bot.chat(period + " report: mined=" + (data.blocksMined || 0) + ", mobs=" + (data.mobsKilled || 0) + ", collected=" + (data.itemsCollected || 0) + ", deposited=" + (data.itemsDeposited || 0) + ", reconnects=" + (data.reconnects || 0));
                     return;
                 }
 
