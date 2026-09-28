@@ -61,7 +61,7 @@ public class AydreamClient implements ClientModInitializer {
         }
 
         String botCommand = command.startsWith("!") ? command : "!" + command;
-        String json = "{"command":"" + escapeJson(botCommand) + ""}";
+        String json = "{\"command\":\"" + escapeJson(botCommand) + "\"}";
 
         try {
             HttpRequest request = HttpRequest.newBuilder()
@@ -124,6 +124,6 @@ public class AydreamClient implements ClientModInitializer {
     private String escapeJson(String value) {
         return value
             .replace("\\", "\\\\")
-            .replace(""", "\\"");
+            .replace("\"", "\\\"");
     }
 }
