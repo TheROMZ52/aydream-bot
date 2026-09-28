@@ -2679,6 +2679,7 @@ async function runSetupPanel() {
 
         try {
             await bot.dig(block);
+            advancedSystems.record("blocksMined", 1);
             notify(`Dug ${block.name} at ${x} ${y} ${z}.`);
         } catch (error) {
             notify("Could not dig that block.");
@@ -3468,6 +3469,12 @@ function setSkin(value, notify) {
         // ====================================
         // Spawn
         // ====================================
+
+        bot.on("entityDead", (entity) => {
+            if (entity && entity !== bot.entity && entity.type === "mob") {
+                advancedSystems.record("mobsKilled", 1);
+            }
+        });
 
         bot.on("death", () => {
 
