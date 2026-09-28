@@ -575,7 +575,7 @@ async function runSetupPanel() {
                     body += chunk;
                     if (body.length > 10000) req.destroy();
                 });
-                req.on("end", () => {
+                req.on("end", async () => {
                     try {
                         const data = JSON.parse(body || "{}");
                         const command = typeof data.command === "string" ? data.command.trim() : "";
