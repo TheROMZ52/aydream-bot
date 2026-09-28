@@ -802,6 +802,16 @@ async function runSetupPanel() {
         if (navigator) navigator.stop();
     }
 
+    async function discardMiningJunk() {
+        if (!bot?.inventory) return;
+        const junk = /^(cobblestone|cobbled_deepslate|stone|deepslate|dirt|gravel|netherrack|tuff|andesite|diorite|granite)$/;
+        for (const item of [...bot.inventory.items()]) {
+            if (junk.test(item.name)) {
+                try { await bot.tossStack(item); } catch {}
+            }
+        }
+    }
+
     async function stripMine(direction, targetName, length, notify) {
         if (!bot?.entity || !mcData) return;
         const vectors = {
@@ -833,13 +843,13 @@ async function runSetupPanel() {
                         notify("Stopped before dangerous fluid.");
                         return;
                     }
-                    if (!isWorthKeepingBlock(block.name)) continue;
                     await equipBestTool(block);
                     try {
                         await bot.dig(block, true);
                         advancedSystems.record("blocksMined", 1);
                     } catch {}
                 }
+                await discardMiningJunk();
                 try {
                     await navigator.goto(new goals.GoalNear(base.x, base.y, base.z, 1), { maxRetries: 2 });
                 } catch {
