@@ -405,6 +405,8 @@ async function runSetupPanel() {
     const advancedSystems = createAdvancedSystems(__dirname);
     let shieldEquipInProgress = false;
     const warnedGear = new Set();
+    const socialReplyCooldowns = new Map();
+    const pendingTrades = new Map();
 
     let lastHealth = null;
     const homes = new Map();
@@ -3887,6 +3889,20 @@ function setSkin(value, notify) {
         };
 
         function tryHandleAsCommand(username, message) {
+            const text = String(message || "").trim();
+            if (username !== CONTROLLER && !text.startsWith("!")) {
+                const lower = text.toLowerCase();
+                const now = Date.now();
+                const last = socialReplyCooldowns.get(username) || 0;
+                if (now - last >= 30000 && /^(hi|hello|hey|سلام|درود|salam)\b/i.test(lower)) {
+                    socialReplyCooldowns.set(username, now);
+                    const replies = ["Hey " + mention(username) + "!", "Hi " + mention(username) + ".", "سلام " + mention(username) + " 👋"];
+                    bot.chat(replies[Math.floor(Math.random() * replies.length)]);
+                }
+                return;
+            }
+
+
 
             const key = `${username}:${message}`;
             const now = Date.now();
@@ -3914,9 +3930,9 @@ function setSkin(value, notify) {
                     return;
                 }
 
-                if (
-                    username !== CONTROLLER
-                ) {
+                const lowerMessage = String(message || "").trim().toLowerCase();
+                const trustedTradeMessage = isTrustedPlayer(username) && lowerMessage.startsWith("!trade accept");
+                if (username !== CONTROLLER && !trustedTradeMessage) {
                     return;
                 }
 
@@ -4374,6 +4390,46 @@ function setSkin(value, notify) {
 
                     collectItemsInArea(x1, y1, z1, x2, y2, z2, (msg) => bot.chat(msg));
 
+                    return;
+                }
+
+                if (command === "trade") {
+                    const sub = parts.shift()?.toLowerCase();
+                    if (sub === "request") {
+                        const target = parts.shift();
+                        const wantItem = parts.shift();
+                        const wantCount = Math.max(1, Number(parts.shift()) || 1);
+                        const giveItem = parts.shift();
+                        const giveCount = Math.max(1, Number(parts.shift()) || 1);
+                        if (!target || !wantItem || !giveItem || !isTrustedPlayer(target)) {
+                            bot.chat("Usage: !trade request <trusted> <wantItem> <wantCount> <giveItem> <giveCount>");
+                            return;
+                        }
+                        pendingTrades.set(target.toLowerCase(), { requester: bot.username, wantItem, wantCount, giveItem, giveCount, createdAt: Date.now() });
+                        bot.whisper(target, "Trade request: I give " + giveCount + " " + giveItem + " for " + wantCount + " " + wantItem + ". Reply !trade accept " + bot.username);
+                        return;
+                    }
+                    if (sub === "accept" && isTrustedPlayer(username)) {
+                        const request = pendingTrades.get(username.toLowerCase());
+                        if (!request || Date.now() - request.createdAt > 120000) {
+                            bot.whisper(username, "No valid pending trade.");
+                            return;
+                        }
+                        const give = bot.inventory.items().find((item) => item.name === request.wantItem);
+                        if (!give || give.count < request.wantCount) {
+                            bot.whisper(username, "I cannot complete the requested side yet.");
+                            return;
+                        }
+                        try {
+                            await bot.toss(give.type, give.metadata ?? null, request.wantCount);
+                            pendingTrades.delete(username.toLowerCase());
+                            bot.whisper(username, "Trade side delivered. Please send your agreed item.");
+                        } catch {
+                            bot.whisper(username, "Trade delivery failed.");
+                        }
+                        return;
+                    }
+                    bot.chat("Usage: !trade request <trusted> <wantItem> <wantCount> <giveItem> <giveCount>");
                     return;
                 }
 
