@@ -442,6 +442,7 @@ async function runSetupPanel() {
     ]);
     let API_TOKEN = process.env.AYDREAM_API_TOKEN || "";
     let apiSecurity = null;
+    let apiCommandHandler = null;
 
     function loadApiToken() {
         if (!API_TOKEN.trim()) {
@@ -590,14 +591,21 @@ async function runSetupPanel() {
                             return;
                         }
 
+                        if (!apiCommandHandler || !bot || !bot.entity) {
+                            res.writeHead(503);
+                            res.end(JSON.stringify({ error: "bot command handler is unavailable" }));
+                            return;
+                        }
+
                         try {
-                            bot.chat(command);
+                            await apiCommandHandler(command);
                             markActivity();
                             res.writeHead(200);
                             res.end(JSON.stringify({ ok: true }));
                         } catch (error) {
+                            log("[API COMMAND ERROR]", error.message || error);
                             res.writeHead(503);
-                            res.end(JSON.stringify({ error: "bot is offline" }));
+                            res.end(JSON.stringify({ error: "command failed" }));
                         }
                     } catch (error) {
                         res.writeHead(400);
@@ -3495,7 +3503,7 @@ function setSkin(value, notify) {
             movements.allowEntityDetection = true;
             movements.allowFreeMotion = true;
             movements.allow1by1towers = false;
-            movements.canOpenDoors = false;
+            movements.canOpenDoors = true;
             movements.dontMineUnderFallingBlock = true;
             movements.dontCreateFlow = true;
             movements.maxDropDown = 3;
@@ -3699,6 +3707,10 @@ function setSkin(value, notify) {
         // formatted system "message" (see below).
         let lastHandledChatKey = null;
         let lastHandledChatTime = 0;
+
+        apiCommandHandler = async (command) => {
+            await handleChatCommand(CONTROLLER, command);
+        };
 
         function tryHandleAsCommand(username, message) {
 
