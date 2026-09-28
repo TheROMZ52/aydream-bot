@@ -18,6 +18,7 @@ const {
     createAdvancedSystems,
     threatPriority
 } = require("./lib/advanced-systems");
+const { generateReply } = require("./lib/social-replies");
 
 // ============================================
 // Simple logger: prints to console AND appends
@@ -3938,7 +3939,23 @@ function setSkin(value, notify) {
                     return;
                 }
 
-                const lowerMessage = String(message || "").trim().toLowerCase();
+                const rawMessage = String(message || "").trim();
+                const lowerMessage = rawMessage.toLowerCase();
+                if (username !== CONTROLLER && !lowerMessage.startsWith("!")) {
+                    if (/^(hi|hello|hey|سلام|درود|salam)\b/i.test(rawMessage)) {
+                        const now = Date.now();
+                        const last = socialReplyCooldowns.get(username) || 0;
+                        if (now - last >= 30000) {
+                            socialReplyCooldowns.set(username, now);
+                            generateReply("به " + username + " جواب بده: " + rawMessage, "polite", true)
+                                .then((reply) => {
+                                    if (reply && bot?.entity) bot.chat(reply.slice(0, 240));
+                                });
+                        }
+                    }
+                    return;
+                }
+
                 const trustedTradeMessage = isTrustedPlayer(username) && lowerMessage.startsWith("!trade accept");
                 if (username !== CONTROLLER && !trustedTradeMessage) {
                     return;
