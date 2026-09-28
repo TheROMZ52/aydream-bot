@@ -14,6 +14,10 @@ const crypto = require("crypto");
 const { createSetupInput } = require("./lib/setup-input");
 const { createApiSecurity } = require("./lib/api-security");
 const { createNavigator } = require("./lib/navigation");
+const {
+    createAdvancedSystems,
+    threatPriority
+} = require("./lib/advanced-systems");
 
 // ============================================
 // Simple logger: prints to console AND appends
@@ -21,6 +25,9 @@ const { createNavigator } = require("./lib/navigation");
 // ============================================
 
 const LOG_FILE = path.join(__dirname, "bot.log");
+const LOG_MAX_BYTES = 5 * 1024 * 1024;
+const LOG_BACKUP_FILE = LOG_FILE + ".1";
+let logRotationInProgress = false;
 
 function formatLogArg(value) {
 
@@ -41,20 +48,22 @@ function formatLogArg(value) {
 }
 
 function log(...args) {
-
     const text = args.map(formatLogArg).join(" ");
-
     process.stdout.write(text + "\n");
-
-    fs.appendFile(
-        LOG_FILE,
-        `[${new Date().toISOString()}] ${text}\n`,
-        () => {}
-    );
-
+    try {
+        if (!logRotationInProgress && fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size >= LOG_MAX_BYTES) {
+            logRotationInProgress = true;
+            try {
+                if (fs.existsSync(LOG_BACKUP_FILE)) fs.unlinkSync(LOG_BACKUP_FILE);
+                fs.renameSync(LOG_FILE, LOG_BACKUP_FILE);
+            } finally {
+                logRotationInProgress = false;
+            }
+        }
+    } catch {}
+    fs.appendFile(LOG_FILE, `[${new Date().toISOString()}] ${text}\n`, () => {});
 }
 
-// ============================================
 // Configuration (defaults - the startup panel below
 // will ask for these and remember the answers)
 // ============================================
@@ -393,6 +402,9 @@ async function runSetupPanel() {
     let normalMovements = null;
     let diggingMovements = null;
     let navigator = null;
+    const advancedSystems = createAdvancedSystems(__dirname);
+    let shieldEquipInProgress = false;
+    const warnedGear = new Set();
 
     let lastHealth = null;
     const homes = new Map();
@@ -716,6 +728,48 @@ async function runSetupPanel() {
         lastActivity = Date.now();
     }
 
+    async function equipShieldIfNeeded() {
+        if (shieldEquipInProgress || !bot?.inventory || !bot?.entity) return;
+        const shield = bot.inventory.items().find((item) => item.name === "shield");
+        if (!shield || bot.inventory.slots?.[45]?.name === "shield") return;
+        shieldEquipInProgress = true;
+        try { await bot.equip(shield, "off-hand"); } catch {}
+        shieldEquipInProgress = false;
+    }
+
+    async function autoEquipBestGear() {
+        if (!bot?.inventory || isFighting || isFleeing) return;
+        const score = (name) => name.includes("netherite") ? 5 : name.includes("diamond") ? 4 : name.includes("iron") ? 3 : name.includes("chainmail") ? 2 : 1;
+        for (const [piece, destination, slot] of [["helmet","head",5],["chestplate","torso",6],["leggings","legs",7],["boots","feet",8]]) {
+            const candidates = bot.inventory.items().filter((item) => item.name.includes(piece)).sort((a,b) => score(b.name)-score(a.name));
+            if (!candidates.length) continue;
+            const current = bot.inventory.slots?.[slot];
+            if (!current || score(candidates[0].name) > score(current.name || "")) {
+                try { await bot.equip(candidates[0], destination); } catch {}
+            }
+        }
+    }
+
+    function reportGearWarnings() {
+        if (!bot?.inventory) return;
+        for (const item of bot.inventory.items()) {
+            const max = Number(item.maxDurability || 0);
+            if (!max) continue;
+            const remaining = max - Number(item.durabilityUsed || 0);
+            if (remaining / max > 0.1) continue;
+            const key = item.name;
+            if (warnedGear.has(key)) continue;
+            warnedGear.add(key);
+            log("[WARN] Low durability: " + item.name);
+        }
+    }
+
+    function formatUptime() {
+        return advancedSystems.formatDuration(advancedSystems.uptimeSeconds());
+    }
+
+
+
     function isBusy() {
         return (
             isEscapingHazard ||
@@ -789,60 +843,14 @@ async function runSetupPanel() {
     // ============================================
 
     function findNearestThreat() {
-
-        if (!bot.entity) {
-            return null;
-        }
-
-        return bot.nearestEntity(
-            (entity) => {
-
-                if (
-                    !entity ||
-                    entity === bot.entity ||
-                    !entity.position
-                ) {
-                    return false;
-                }
-
-                const distance =
-                    bot.entity.position.distanceTo(
-                        entity.position
-                    );
-
-                if (
-                    distance >
-                    THREAT_RANGE
-                ) {
-                    return false;
-                }
-
-                if (
-                    entity.type === "player" &&
-                    entity.username !== bot.username &&
-                    !isTrustedPlayer(entity.username)
-                ) {
-
-                    return true;
-
-                }
-
-                if (
-                    entity.name &&
-                    HOSTILE_MOBS.has(
-                        entity.name
-                    )
-                ) {
-
-                    return true;
-
-                }
-
-                return false;
-
-            }
-        );
-
+        const threats = findAllThreats();
+        if (!bot?.entity || !threats.length) return null;
+        threats.sort((a, b) => {
+            const priority = threatPriority(a) - threatPriority(b);
+            if (priority !== 0) return priority;
+            return bot.entity.position.distanceTo(a.position) - bot.entity.position.distanceTo(b.position);
+        });
+        return threats[0];
     }
 
     // ============================================
@@ -3361,6 +3369,11 @@ function setSkin(value, notify) {
         startHazardWatch();
         startIdleBehavior();
         startAutoDepositWatch();
+        setInterval(() => {
+            if (!bot?.entity || isBusy()) return;
+            reportGearWarnings();
+            autoEquipBestGear();
+        }, 10000);
     }
 
     // ============================================
@@ -3374,6 +3387,7 @@ function setSkin(value, notify) {
         }
 
         reconnectAttempts++;
+        advancedSystems.recordReconnect();
 
         const delay =
             Math.min(
@@ -4252,6 +4266,46 @@ function setSkin(value, notify) {
                 // STATUS
                 // ====================================
 
+                if (command === "uptime") {
+                    bot.chat("Uptime: " + formatUptime() + " | reconnects: " + advancedSystems.summary("total").reconnects);
+                    return;
+                }
+
+                if (command === "stats") {
+                    const period = parts[0] === "daily" || parts[0] === "weekly" ? parts[0] : "total";
+                    const data = advancedSystems.summary(period);
+                    bot.chat(period + " stats: mined=" + (data.blocksMined || 0) + ", killed=" + (data.mobsKilled || 0) + ", collected=" + (data.itemsCollected || 0) + ", deposited=" + (data.itemsDeposited || 0));
+                    return;
+                }
+
+                if (command === "waypoint") {
+                    const sub = parts.shift()?.toLowerCase();
+                    if (sub === "set") {
+                        if (!parts[0] || !bot.entity) return bot.chat("Usage: !waypoint set <name>");
+                        advancedSystems.setWaypoint(parts[0], bot.entity.position);
+                        bot.chat("Waypoint '" + parts[0] + "' saved.");
+                        return;
+                    }
+                    if (sub === "delete") {
+                        bot.chat(advancedSystems.deleteWaypoint(parts[0]) ? "Waypoint deleted." : "Waypoint not found.");
+                        return;
+                    }
+                    if (sub === "list") {
+                        const names = Object.keys(advancedSystems.listWaypoints());
+                        bot.chat(names.length ? "Waypoints: " + names.join(", ") : "No waypoints.");
+                        return;
+                    }
+                    if (sub === "goto") {
+                        const point = advancedSystems.getWaypoint(parts[0]);
+                        if (!point) return bot.chat("Waypoint not found.");
+                        navigator.setGoal(new goals.GoalNear(point.x, point.y, point.z, 1));
+                        bot.chat("Going to waypoint '" + parts[0] + "'.");
+                        return;
+                    }
+                    bot.chat("Usage: !waypoint <set|goto|delete|list> [name]");
+                    return;
+                }
+
                 if (command === "status") {
 
                     reportStatus((msg) => bot.chat(msg));
@@ -4916,6 +4970,10 @@ function setSkin(value, notify) {
                     handleDamageTaken();
 
                 }
+
+                const closeThreat = findNearestThreat();
+                if (closeThreat && closeThreat.name === "creeper" && bot.entity.position.distanceTo(closeThreat.position) <= 4 && !isFleeing) fleeFrom(closeThreat);
+                if (closeThreat && bot.entity.position.distanceTo(closeThreat.position) <= 3.5) equipShieldIfNeeded();
 
                 if (bot.health <= TOTEM_HEALTH_THRESHOLD) {
                     tryEquipTotem();
