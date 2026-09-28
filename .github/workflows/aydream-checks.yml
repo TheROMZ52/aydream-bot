@@ -16,6 +16,8 @@ on:
       - "bot.js"
       - "lib/**"
       - "test/**"
+      - "api/**"
+      - "panel/**"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/aydream-checks.yml"
