@@ -34,8 +34,7 @@ public class AydreamClient implements ClientModInitializer {
         dispatcher.register(
             literal("dream")
                 .executes(context -> {
-                    MinecraftClient client = MinecraftClient.getInstance();
-                    client.execute(() -> client.setScreen(new AydreamScreen(null)));
+                    MinecraftClient.getInstance().setScreen(new AydreamScreen(null));
                     return 1;
                 })
                 .then(literal("help").executes(context -> {
