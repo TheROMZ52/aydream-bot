@@ -74,35 +74,38 @@ public class AydreamScreen extends Screen {
     }
 
     private void buildDashboard() {
-        int panelX = width / 2 - 330;
+        int panelW = Math.min(660, width - 40);
+        int panelX = (width - panelW) / 2;
         int panelY = 48;
-        int panelW = 660;
+        int buttonW = (panelW - 75) / 3;
 
-        addButton(panelX + 25, panelY + 78, 185, 30, "Movement", () -> open("movement"));
-        addButton(panelX + 225, panelY + 78, 185, 30, "Combat", () -> open("combat"));
-        addButton(panelX + 425, panelY + 78, 185, 30, "Homes", () -> open("homes"));
+        int[] columns = {panelX + 25, panelX + 25 + buttonW + 15, panelX + 25 + (buttonW + 15) * 2};
 
-        addButton(panelX + 25, panelY + 116, 185, 30, "Automation", () -> open("automation"));
-        addButton(panelX + 225, panelY + 116, 185, 30, "Inventory", () -> open("inventory"));
-        addButton(panelX + 425, panelY + 116, 185, 30, "Info", () -> open("info"));
+        addButton(columns[0], panelY + 78, buttonW, 30, "Movement", () -> open("movement"));
+        addButton(columns[1], panelY + 78, buttonW, 30, "Combat", () -> open("combat"));
+        addButton(columns[2], panelY + 78, buttonW, 30, "Homes", () -> open("homes"));
 
-        addButton(panelX + 25, panelY + 170, 185, 30, "Quick Follow", () -> apiAction("!follow"));
-        addButton(panelX + 225, panelY + 170, 185, 30, "Stop Everything", () -> apiAction("!clear"));
-        addButton(panelX + 425, panelY + 170, 185, 30, "Refresh", this::forceRefresh);
-        addButton(panelX + 25, panelY + 208, 185, 30, "Settings", () -> open("settings"));
-        addButton(panelX + 225, panelY + 208, 185, 30, "Players", () -> open("players"));
+        addButton(columns[0], panelY + 116, buttonW, 30, "Automation", () -> open("automation"));
+        addButton(columns[1], panelY + 116, buttonW, 30, "Inventory", () -> open("inventory"));
+        addButton(columns[2], panelY + 116, buttonW, 30, "Info", () -> open("info"));
+
+        addButton(columns[0], panelY + 170, buttonW, 30, "Quick Follow", () -> apiAction("!follow"));
+        addButton(columns[1], panelY + 170, buttonW, 30, "Stop Everything", () -> apiAction("!clear"));
+        addButton(columns[2], panelY + 170, buttonW, 30, "Refresh", this::forceRefresh);
+        addButton(columns[0], panelY + 208, buttonW, 30, "Settings", () -> open("settings"));
+        addButton(columns[1], panelY + 208, buttonW, 30, "Players", () -> open("players"));
         if (!nearbyPlayers.isEmpty()) {
             String player = extractPlayerName(nearbyPlayers.get(0));
-            addButton(panelX + 425, panelY + 208, 185, 30, "Follow " + player, () -> apiAction("!follow " + player));
+            addButton(columns[2], panelY + 208, buttonW, 30, "Follow " + player, () -> apiAction("!follow " + player));
         } else {
-            addButton(panelX + 425, panelY + 208, 185, 30, "No Players", () -> {});
+            addButton(columns[2], panelY + 208, buttonW, 30, "No Players", () -> {});
         }
 
         if (!savedHomes.isEmpty()) {
             int homeY = panelY + 246;
             for (int i = 0; i < Math.min(3, savedHomes.size()); i++) {
                 String home = savedHomes.get(i);
-                addButton(panelX + 25 + i * 200, homeY, 185, 26, "Go: " + home, () -> apiAction("!home " + home));
+                addButton(columns[i], homeY, buttonW, 26, "Go: " + home, () -> apiAction("!home " + home));
             }
         }
     }
@@ -678,14 +681,13 @@ public class AydreamScreen extends Screen {
         context.fill(0, 0, width, height, 0xFF0B0D12);
         refreshStatus();
 
-        int mainX = category.equals("dashboard") ? width / 2 - 330 : 195;
+        int mainX = category.equals("dashboard") ? Math.max(20, (width - Math.min(660, width - 40)) / 2) : 195;
         int mainY = 48;
-        int mainW = category.equals("dashboard") ? 660 : width - 225;
-        int mainH = category.equals("dashboard") ? Math.min(370, height - 88) : Math.min(285, height - 88);
+        int mainW = category.equals("dashboard") ? Math.min(660, width - 40) : Math.max(0, width - 225);
+        int mainH = category.equals("dashboard") ? Math.min(392, Math.max(300, height - 70)) : Math.min(285, Math.max(220, height - 70));
 
         context.fill(mainX, mainY, mainX + mainW, mainY + mainH, PANEL);
         context.fill(mainX + 1, mainY + 1, mainX + mainW - 1, mainY + 55, GLASS);
-        // accent strip on top of the main panel + divider under the header
         context.fill(mainX, mainY, mainX + mainW, mainY + 2, ACCENT);
         context.fill(mainX + 24, mainY + 56, mainX + mainW - 24, mainY + 57, ACCENT_SOFT);
 
@@ -713,15 +715,16 @@ public class AydreamScreen extends Screen {
             context.drawText(textRenderer, Text.literal("Bot Control"), mainX + 25, mainY + 62, MUTED, false);
             int statusColor = apiOnline ? 0xFF7CFFB2 : 0xFFFF7777;
             context.drawText(textRenderer, Text.literal(apiOnline ? "ONLINE" : "OFFLINE"), mainX + mainW - 82, mainY + 22, statusColor, true);
-            context.drawText(textRenderer, Text.literal("HP  " + botHealth), mainX + 25, mainY + 218, TEXT, false);
-            context.drawText(textRenderer, Text.literal("FOOD  " + botFood), mainX + 150, mainY + 218, TEXT, false);
-            context.drawText(textRenderer, Text.literal("TASK  " + botTask), mainX + 285, mainY + 218, TEXT, false);
-            context.drawText(textRenderer, Text.literal("POS  " + botPosition), mainX + 25, mainY + 238, MUTED, false);
+            context.drawText(textRenderer, Text.literal("HP  " + botHealth), mainX + 25, mainY + 296, TEXT, false);
+            context.drawText(textRenderer, Text.literal("FOOD  " + botFood), mainX + 150, mainY + 296, TEXT, false);
+            context.drawText(textRenderer, Text.literal("TASK  " + botTask), mainX + 285, mainY + 296, TEXT, false);
+            context.drawText(textRenderer, Text.literal("POS  " + botPosition), mainX + 25, mainY + 316, MUTED, false);
 
-            int cardY = mainY + 258;
+            int cardY = mainY + 326;
             int cardW = (mainW - 60) / 2;
+            int rightCardX = mainX + 35 + cardW;
             context.fill(mainX + 25, cardY, mainX + 25 + cardW, cardY + 70, PANEL_LIGHT);
-            context.fill(mainX + 35 + cardW, cardY, mainX + 35 + cardW * 2, cardY + 70, PANEL_LIGHT);
+            context.fill(rightCardX, cardY, rightCardX + cardW, cardY + 70, PANEL_LIGHT);
             context.drawText(textRenderer, Text.literal("NEARBY PLAYERS  " + nearbyPlayers.size()), mainX + 35, cardY + 10, TEXT, true);
             int playerY = cardY + 27;
             for (int i = 0; i < Math.min(3, nearbyPlayers.size()); i++) {
@@ -731,13 +734,13 @@ public class AydreamScreen extends Screen {
                 context.drawText(textRenderer, Text.literal(apiOnline ? "No players detected" : "Waiting for bot..."), mainX + 35, playerY, MUTED, false);
             }
 
-            context.drawText(textRenderer, Text.literal("HOMES  " + savedHomes.size()), mainX + 45 + cardW, cardY + 10, TEXT, true);
+            context.drawText(textRenderer, Text.literal("HOMES  " + savedHomes.size()), rightCardX + 10, cardY + 10, TEXT, true);
             int homeY = cardY + 27;
             for (int i = 0; i < Math.min(3, savedHomes.size()); i++) {
-                context.drawText(textRenderer, Text.literal(savedHomes.get(i)), mainX + 45 + cardW, homeY + i * 13, MUTED, false);
+                context.drawText(textRenderer, Text.literal(savedHomes.get(i)), rightCardX + 10, homeY + i * 13, MUTED, false);
             }
             if (savedHomes.isEmpty()) {
-                context.drawText(textRenderer, Text.literal("No saved homes"), mainX + 45 + cardW, homeY, MUTED, false);
+                context.drawText(textRenderer, Text.literal("No saved homes"), rightCardX + 10, homeY, MUTED, false);
             }
             if (!actionMessage.isEmpty()) {
                 context.drawText(textRenderer, Text.literal(actionMessage), mainX + 25, mainY + mainH - 10, ACCENT, false);
