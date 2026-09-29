@@ -4,13 +4,13 @@ $ErrorActionPreference = "Stop"
 $repo = "TheROMZ52/aydream-bot"
 
 try {
-    $output = @(gh workflow list --repo $repo --all --json name,path,state 2>&1)
+    $raw = gh workflow list --repo $repo --all --json name,path,state 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw ($output -join [Environment]::NewLine)
+        throw ($raw -join [Environment]::NewLine)
     }
 
-    $json = $output -join [Environment]::NewLine
-    $workflows = @($json | ConvertFrom-Json)
+    $json = ($raw -join "")
+    $workflows = @(ConvertFrom-Json -InputObject $json)
 
     if ($workflows.Count -eq 0) {
         Write-Host "No workflows found." -ForegroundColor Red
@@ -31,22 +31,17 @@ try {
         Write-Host ""
 
         for ($n = 0; $n -lt $workflows.Count; $n++) {
-            $state = $workflows[$n].state
-
-            if ($state -eq "active") {
-                $stateColor = "Green"
-            } elseif ($state -like "disabled*") {
-                $stateColor = "Red"
-            } else {
-                $stateColor = "DarkGray"
-            }
+            $state = [string]$workflows[$n].state
+            $line = "    " + [string]$workflows[$n].name + "  [" + $state + "]"
 
             if ($n -eq $selectedIndex) {
-                Write-Host ("  > " + $workflows[$n].name) -ForegroundColor White -BackgroundColor DarkBlue -NoNewline
-                Write-Host ("  [" + $state + "]") -ForegroundColor $stateColor -BackgroundColor DarkBlue
+                Write-Host ("> " + $line.TrimStart()) -ForegroundColor White -BackgroundColor DarkBlue
+            } elseif ($state -eq "active") {
+                Write-Host $line -ForegroundColor Green
+            } elseif ($state -like "disabled*") {
+                Write-Host $line -ForegroundColor Red
             } else {
-                Write-Host ("    " + $workflows[$n].name) -ForegroundColor White -NoNewline
-                Write-Host ("  [" + $state + "]") -ForegroundColor $stateColor
+                Write-Host $line -ForegroundColor Gray
             }
         }
 
