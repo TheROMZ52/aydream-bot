@@ -75,7 +75,7 @@ public class AydreamScreen extends Screen {
             buildCategory();
         }
 
-        addButton(width - 115, height - 38, 95, 24, "Close", this::close);
+        addButton(Math.max(10, width - 105), Math.max(8, height - 32), 95, 24, "Close", this::close);
     }
 
     private void buildDashboard() {
@@ -122,22 +122,35 @@ public class AydreamScreen extends Screen {
     }
 
     private void buildSidebar() {
-        int x = 28;
-        int y = 65;
+        int x = 20;
+        int y = 58;
         int spacing = sidebarSpacing();
 
         for (int i = 0; i < SIDEBAR_LABELS.length; i++) {
             String value = SIDEBAR_VALUES[i];
-            addButton(x, y + i * spacing, 150, 28, SIDEBAR_LABELS[i], () -> open(value));
+            addButton(x, y + i * spacing, sidebarWidth() - 30, 28, SIDEBAR_LABELS[i], () -> open(value));
         }
     }
 
     private int sidebarSpacing() {
-        return height < 430 ? 29 : 34;
+        int available = Math.max(280, height - 120);
+        return Math.max(29, Math.min(38, available / SIDEBAR_LABELS.length));
+    }
+
+    private int sidebarWidth() {
+        return Math.max(145, Math.min(185, width / 4));
+    }
+
+    private int contentLeft() {
+        return sidebarWidth() + 15;
+    }
+
+    private int contentWidth() {
+        return Math.max(220, width - contentLeft() - 20);
     }
 
     private void buildCategory() {
-        int left = 215;
+        int left = contentLeft() + 15;
         int top = 82;
         if (category.startsWith("player:")) {
             buildPlayerDetail(category.substring(7));
@@ -256,7 +269,7 @@ public class AydreamScreen extends Screen {
     }
 
     private void buildPlayers() {
-        int left = 215;
+        int left = contentLeft() + 15;
         int top = 92;
 
         if (nearbyPlayers.isEmpty()) {
@@ -303,7 +316,7 @@ public class AydreamScreen extends Screen {
     }
 
     private void buildPlayerDetail(String player) {
-        int left = 235;
+        int left = contentLeft() + 35;
         int top = 98;
         contextText = findPlayerDisplay(player);
 
@@ -824,10 +837,17 @@ public class AydreamScreen extends Screen {
         context.fill(0, 0, width, height, 0xFF0B0D12);
         refreshStatus();
 
-        int mainX = category.equals("dashboard") ? Math.max(20, (width - Math.min(660, width - 40)) / 2) : 195;
-        int mainY = 48;
-        int mainW = category.equals("dashboard") ? Math.min(660, width - 40) : Math.max(0, width - 225);
-        int mainH = category.equals("dashboard") ? Math.min(392, Math.max(300, height - 70)) : Math.min(285, Math.max(220, height - 70));
+        int mainY = 38;
+        int mainX;
+        int mainW;
+        if (category.equals("dashboard")) {
+            mainW = Math.min(760, Math.max(320, width - 40));
+            mainX = (width - mainW) / 2;
+        } else {
+            mainX = contentLeft();
+            mainW = contentWidth();
+        }
+        int mainH = Math.max(220, height - 58);
 
         context.fill(mainX, mainY, mainX + mainW, mainY + mainH, PANEL);
         context.fill(mainX + 1, mainY + 1, mainX + mainW - 1, mainY + 55, GLASS);
@@ -835,17 +855,18 @@ public class AydreamScreen extends Screen {
         context.fill(mainX + 24, mainY + 56, mainX + mainW - 24, mainY + 57, ACCENT_SOFT);
 
         if (!category.equals("dashboard")) {
-            context.fill(20, 48, 185, mainY + mainH, PANEL);
-            context.fill(21, 49, 184, 86, GLASS);
-            context.fill(20, 48, 185, 50, ACCENT);
+            int sideW = sidebarWidth();
+            context.fill(10, mainY, sideW, height - 8, PANEL);
+            context.fill(11, mainY + 1, sideW - 1, mainY + 38, GLASS);
+            context.fill(10, mainY, sideW, mainY + 2, ACCENT);
 
             // highlight the active sidebar tab (drawn behind the buttons)
             String activeValue = category.startsWith("player:") ? "players" : category;
             for (int i = 0; i < SIDEBAR_VALUES.length; i++) {
                 if (SIDEBAR_VALUES[i].equals(activeValue)) {
-                    int tabY = 65 + i * sidebarSpacing();
-                    context.fill(24, tabY - 2, 182, tabY + 30, ACCENT_SOFT);
-                    context.fill(24, tabY - 2, 27, tabY + 30, ACCENT);
+                    int tabY = 58 + i * sidebarSpacing();
+                    context.fill(16, tabY - 2, sideW - 3, tabY + 30, ACCENT_SOFT);
+                    context.fill(16, tabY - 2, 19, tabY + 30, ACCENT);
                     break;
                 }
             }
