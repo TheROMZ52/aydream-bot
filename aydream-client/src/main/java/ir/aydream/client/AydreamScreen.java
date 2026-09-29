@@ -949,3 +949,4 @@ public class AydreamScreen extends Screen {
 
     private record Entry(String label, String command) {}
 }
+
