@@ -464,6 +464,8 @@ async function runSetupPanel() {
     let apiSecurity = null;
     let apiCommandHandler = null;
     let apiCaptureAllowChat = false;
+    let apiCommandQueue = Promise.resolve();
+    let apiChatWrappedBot = null;
     let interactiveChatAvailable = false;
 
     function loadApiToken() {
@@ -619,25 +621,29 @@ async function runSetupPanel() {
                             return;
                         }
 
-                        apiResponseCapture = [];
-                        apiCaptureAllowChat = command.toLowerCase() === "!say";
-                        try {
-                            await apiCommandHandler(command);
-                            markActivity();
-                            const messages = [...new Set(apiResponseCapture)].filter(Boolean).slice(-20);
-                            res.writeHead(200);
-                            res.end(JSON.stringify({
-                                ok: true,
-                                messages: messages.length ? messages : ["Command completed."]
-                            }));
-                        } catch (error) {
-                            log("[API COMMAND ERROR]", error.message || error);
-                            res.writeHead(503);
-                            res.end(JSON.stringify({ error: "command failed" }));
-                        } finally {
-                            apiResponseCapture = null;
-                            apiCaptureAllowChat = false;
-                        }
+                        const runCommand = apiCommandQueue.then(async () => {
+                            apiResponseCapture = [];
+                            apiCaptureAllowChat = command.toLowerCase() === "!say";
+                            try {
+                                await apiCommandHandler(command);
+                                markActivity();
+                                const messages = [...new Set(apiResponseCapture)].filter(Boolean).slice(-20);
+                                res.writeHead(200);
+                                res.end(JSON.stringify({
+                                    ok: true,
+                                    messages: messages.length ? messages : ["Command completed."]
+                                }));
+                            } catch (error) {
+                                log("[API COMMAND ERROR]", error.message || error);
+                                res.writeHead(503);
+                                res.end(JSON.stringify({ error: "command failed" }));
+                            } finally {
+                                apiResponseCapture = null;
+                                apiCaptureAllowChat = false;
+                            }
+                        });
+                        apiCommandQueue = runCommand.catch(() => {});
+                        await runCommand;
                     } catch (error) {
                         res.writeHead(400);
                         res.end(JSON.stringify({ error: "invalid json" }));
@@ -3653,9 +3659,11 @@ function setSkin(value, notify) {
             auth: "offline"
         });
 
-        const originalBotChat = typeof bot.chat === "function" ? bot.chat.bind(bot) : null;
-        if (originalBotChat) {
-            bot.chat = (message) => {
+        function installApiChatCapture() {
+            if (!bot || apiChatWrappedBot === bot || typeof bot.chat !== "function") return;
+            const currentBot = bot;
+            const originalBotChat = currentBot.chat.bind(currentBot);
+            currentBot.chat = (message) => {
                 const text = String(message ?? "");
                 if (apiResponseCapture && !apiCaptureAllowChat && !text.startsWith("/")) {
                     apiResponseCapture.push(text);
@@ -3663,7 +3671,11 @@ function setSkin(value, notify) {
                 }
                 return originalBotChat(text);
             };
+            apiChatWrappedBot = currentBot;
         }
+
+        installApiChatCapture();
+        bot.once("login", installApiChatCapture);
 
         hasAttemptedLogin = false;
 
