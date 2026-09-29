@@ -4,12 +4,14 @@ $ErrorActionPreference = "Stop"
 $repo = "TheROMZ52/aydream-bot"
 
 try {
-    $json = gh workflow list --repo $repo --all --json name,path,state 2>&1
+    $output = @(gh workflow list --repo $repo --all --json name,path,state 2>&1)
     if ($LASTEXITCODE -ne 0) {
-        throw ($json -join [Environment]::NewLine)
+        throw ($output -join [Environment]::NewLine)
     }
 
+    $json = $output -join [Environment]::NewLine
     $workflows = @($json | ConvertFrom-Json)
+
     if ($workflows.Count -eq 0) {
         Write-Host "No workflows found." -ForegroundColor Red
         exit 1
@@ -23,9 +25,9 @@ try {
         Write-Host "  Aydream GitHub Actions" -ForegroundColor Cyan
         Write-Host "  =====================" -ForegroundColor DarkCyan
         Write-Host ""
-        Write-Host "  ↑ / ↓  Select workflow" -ForegroundColor Gray
-        Write-Host "  Enter  Run workflow" -ForegroundColor Green
-        Write-Host "  Esc    Cancel" -ForegroundColor Yellow
+        Write-Host "  Up/Down  Select workflow" -ForegroundColor Gray
+        Write-Host "  Enter    Run workflow" -ForegroundColor Green
+        Write-Host "  Esc      Cancel" -ForegroundColor Yellow
         Write-Host ""
 
         for ($n = 0; $n -lt $workflows.Count; $n++) {
@@ -33,6 +35,8 @@ try {
 
             if ($state -eq "active") {
                 $stateColor = "Green"
+            } elseif ($state -like "disabled*") {
+                $stateColor = "Red"
             } else {
                 $stateColor = "DarkGray"
             }
@@ -74,24 +78,24 @@ try {
 
     Clear-Host
     Write-Host ""
-    Write-Host "  ▶ Running workflow" -ForegroundColor Cyan
-    Write-Host "  $($selected.name)" -ForegroundColor White
+    Write-Host "  Running workflow" -ForegroundColor Cyan
+    Write-Host ("  " + $selected.name) -ForegroundColor White
     Write-Host ""
 
     gh workflow run $selected.path --repo $repo --ref main
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
-        Write-Host "  ✖ Failed to start workflow." -ForegroundColor Red
+        Write-Host "  Failed to start workflow." -ForegroundColor Red
         exit $LASTEXITCODE
     }
 
     Write-Host ""
-    Write-Host "  ✔ Workflow started successfully." -ForegroundColor Green
+    Write-Host "  Workflow started successfully." -ForegroundColor Green
 }
 catch {
     Write-Host ""
-    Write-Host "  ✖ Error:" -ForegroundColor Red
-    Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "  Error:" -ForegroundColor Red
+    Write-Host ("  " + $_.Exception.Message) -ForegroundColor Yellow
     exit 1
 }
