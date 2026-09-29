@@ -37,6 +37,7 @@ public class AydreamScreen extends Screen {
     private volatile List<String> inventoryItems = List.of();
     private volatile String heldItem = "empty";
     private volatile String actionMessage = "";
+    private volatile List<String> actionResponses = List.of();
     private volatile String lastActivity = "--";
     private volatile String botBusy = "--";
     private long nextRefresh = 0L;
@@ -545,16 +546,66 @@ public class AydreamScreen extends Screen {
         HttpRequest request = buildRequest("/api/action", "POST", json);
         if (request == null) {
             actionMessage = "Invalid API URL";
+            actionResponses = List.of();
             return;
         }
+        actionMessage = "Running: " + command;
         apiClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
-            actionMessage = response.statusCode() >= 200 && response.statusCode() < 300
-                ? "Sent: " + command
-                : "Action failed";
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                List<String> messages = extractJsonStringArray(response.body(), "messages");
+                actionResponses = messages;
+                actionMessage = "Done: " + command;
+            } else {
+                actionResponses = List.of();
+                actionMessage = "Action failed";
+            }
         }).exceptionally(error -> {
+            actionResponses = List.of();
             actionMessage = "API offline";
             return null;
         });
+    }
+
+    private List<String> extractJsonStringArray(String json, String key) {
+        List<String> values = new ArrayList<>();
+        String marker = "\"" + key + "\":[";
+        int start = json.indexOf(marker);
+        if (start < 0) return values;
+        start += marker.length();
+        int end = json.indexOf("]", start);
+        if (end < 0) return values;
+
+        String array = json.substring(start, end);
+        boolean escaped = false;
+        StringBuilder current = null;
+
+        for (int i = 0; i < array.length(); i++) {
+            char ch = array.charAt(i);
+            if (current == null) {
+                if (ch == "\"") current = new StringBuilder();
+                continue;
+            }
+            if (escaped) {
+                current.append(switch (ch) {
+                    case "\" -> "\\";
+                    case "\"" -> "\"";
+                    case "n" -> "\n";
+                    case "r" -> "\r";
+                    case "t" -> "\t";
+                    default -> ch;
+                });
+                escaped = false;
+            } else if (ch == "\\") {
+                escaped = true;
+            } else if (ch == "\"") {
+                values.add(current.toString());
+                current = null;
+            } else {
+                current.append(ch);
+            }
+        }
+
+        return values;
     }
 
     private void forceRefresh() {
@@ -744,6 +795,18 @@ public class AydreamScreen extends Screen {
             }
             if (!actionMessage.isEmpty()) {
                 context.drawText(textRenderer, Text.literal(actionMessage), mainX + 25, mainY + mainH - 10, ACCENT, false);
+            }
+            if (!actionResponses.isEmpty()) {
+                int responseY = mainY + 240;
+                context.fill(mainX + 25, responseY, mainX + mainW - 25, responseY + 48, PANEL_LIGHT);
+                context.drawText(textRenderer, Text.literal("BOT RESPONSE"), mainX + 35, responseY + 8, TEXT, true);
+                int lineY = responseY + 23;
+                for (int i = Math.max(0, actionResponses.size() - 2); i < actionResponses.size(); i++) {
+                    String message = actionResponses.get(i);
+                    if (message.length() > 82) message = message.substring(0, 82) + "...";
+                    context.drawText(textRenderer, Text.literal(message), mainX + 35, lineY, MUTED, false);
+                    lineY += 13;
+                }
             }
         } else {
             String title = category.startsWith("player:") ? "PLAYER / " + category.substring(7).toUpperCase() : category.toUpperCase();
