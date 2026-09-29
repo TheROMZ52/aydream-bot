@@ -104,9 +104,10 @@ public final class AydreamUpdater {
         String sourcePath = source.toAbsolutePath().toString().replace("'", "''");
         String targetPath = target.toAbsolutePath().toString().replace("'", "''");
         String scriptPath = script.toAbsolutePath().toString().replace("'", "''");
+        String modsPath = runDir.resolve("mods").toAbsolutePath().toString().replace("'", "''");
         String content = "@echo off\r\n"
             + "timeout /t 3 /nobreak >nul\r\n"
-            + "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Copy-Item -LiteralPath '" + sourcePath + "' -Destination '" + targetPath + "' -Force\"\r\n"
+            + "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$m=Get-ChildItem -LiteralPath '" + modsPath + "' -Filter 'AydreamClient*.jar' | Where-Object { $_.Name -ne 'AydreamClient.jar' } | Select-Object -First 1; if($m){Copy-Item -LiteralPath '" + sourcePath + "' -Destination $m.FullName -Force}else{Copy-Item -LiteralPath '" + sourcePath + "' -Destination '" + targetPath + "' -Force}\"\r\n"
             + "del /f /q \"" + scriptPath + "\"\r\n";
         Files.writeString(script, content);
         new ProcessBuilder("cmd", "/c", "start", "", "/b", script.toAbsolutePath().toString()).start();
