@@ -52,9 +52,6 @@ function formatLogArg(value) {
 function log(...args) {
     const text = args.map(formatLogArg).join(" ");
     process.stdout.write(text + "\n");
-    if (apiResponseCapture) {
-        apiResponseCapture.push(text);
-    }
     try {
         if (!logRotationInProgress && fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size >= LOG_MAX_BYTES) {
             logRotationInProgress = true;
