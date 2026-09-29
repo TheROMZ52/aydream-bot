@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "ir.aydream"
-version = "1.0.0"
+version = "1.0.1"
 
 base { archivesName = "AydreamClient" }
 
@@ -21,7 +21,7 @@ dependencies {
 
 processResources {
     inputs.property "version", project.version
-    filesMatching("fabric.mod.json") { expand "version": project.version }
+    filesMatching("fabric.mod.json") { expand "version" = project.version }
 }
 
 tasks.withType(JavaCompile).configureEach {
