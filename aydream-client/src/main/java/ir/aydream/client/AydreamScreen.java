@@ -43,6 +43,7 @@ public class AydreamScreen extends Screen {
     private volatile AydreamUpdater.UpdateInfo updateInfo = AydreamUpdater.UpdateInfo.none();
     private volatile String updateMessage = "";
     private long nextRefresh = 0L;
+    private long nextUpdateCheck = 0L;
 
     private static final int PANEL = 0xD91A1D26;
     private static final int PANEL_LIGHT = 0xE0262935;
@@ -67,6 +68,7 @@ public class AydreamScreen extends Screen {
 
         if (category.equals("dashboard")) {
             buildDashboard();
+            checkForUpdates();
             refreshStatus();
         } else {
             buildSidebar();
@@ -101,7 +103,7 @@ public class AydreamScreen extends Screen {
         addButton(columns[1], panelY + 170, buttonW, 30, "Stop Everything", () -> apiAction("!clear"));
         addButton(columns[2], panelY + 170, buttonW, 30, "Refresh", this::forceRefresh);
         addButton(columns[0], panelY + 208, buttonW, 30, "Settings", () -> open("settings"));
-        addButton(columns[1], panelY + 246, buttonW, 30, "Updates", this::openUpdates);
+        addButton(columns[1], panelY + 246, buttonW, 30, updateInfo.available() ? "Update Available" : "Updates", this::openUpdates);
         addButton(columns[1], panelY + 208, buttonW, 30, "Players", () -> open("players"));
         if (!nearbyPlayers.isEmpty()) {
             String player = extractPlayerName(nearbyPlayers.get(0));
@@ -424,6 +426,18 @@ public class AydreamScreen extends Screen {
                 if (MinecraftClient.getInstance().currentScreen == this) init();
             });
         }).exceptionally(error -> null);
+    }
+
+    private void checkForUpdates() {
+        long now = System.currentTimeMillis();
+        if (now < nextUpdateCheck) return;
+        nextUpdateCheck = now + 300000L;
+        AydreamUpdater.check(apiClient, info -> {
+            updateInfo = info;
+            MinecraftClient.getInstance().execute(() -> {
+                if (MinecraftClient.getInstance().currentScreen == this) init();
+            });
+        });
     }
 
     private void openUpdates() {
