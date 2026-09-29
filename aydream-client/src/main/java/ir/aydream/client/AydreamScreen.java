@@ -44,6 +44,7 @@ public class AydreamScreen extends Screen {
     private volatile String updateMessage = "";
     private long nextRefresh = 0L;
     private long nextUpdateCheck = 0L;
+    private long nextUpdateCheck = 0L;
 
     private static final int PANEL = 0xD91A1D26;
     private static final int PANEL_LIGHT = 0xE0262935;
@@ -426,6 +427,18 @@ public class AydreamScreen extends Screen {
                 if (MinecraftClient.getInstance().currentScreen == this) init();
             });
         }).exceptionally(error -> null);
+    }
+
+    private void checkForUpdates() {
+        long now = System.currentTimeMillis();
+        if (now < nextUpdateCheck) return;
+        nextUpdateCheck = now + 300000L;
+        AydreamUpdater.check(apiClient, info -> {
+            updateInfo = info;
+            MinecraftClient.getInstance().execute(() -> {
+                if (MinecraftClient.getInstance().currentScreen == this) init();
+            });
+        });
     }
 
     private void checkForUpdates() {
