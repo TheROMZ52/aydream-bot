@@ -29,6 +29,7 @@ const LOG_FILE = path.join(__dirname, "bot.log");
 const LOG_MAX_BYTES = 5 * 1024 * 1024;
 const LOG_BACKUP_FILE = LOG_FILE + ".1";
 let logRotationInProgress = false;
+let apiResponseCapture = null;
 
 function formatLogArg(value) {
 
@@ -462,7 +463,6 @@ async function runSetupPanel() {
     let API_TOKEN = process.env.AYDREAM_API_TOKEN || "";
     let apiSecurity = null;
     let apiCommandHandler = null;
-    let apiResponseCapture = null;
     let apiCaptureAllowChat = false;
     let interactiveChatAvailable = false;
 
