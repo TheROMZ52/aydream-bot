@@ -27,6 +27,6 @@ jobs:
       - run: ./gradlew build --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: AydreamClient-1.0.0
+          name: AydreamClient
           path: aydream-client/build/libs/*.jar
           if-no-files-found: error
