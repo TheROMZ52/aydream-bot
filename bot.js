@@ -3653,15 +3653,17 @@ function setSkin(value, notify) {
             auth: "offline"
         });
 
-        const originalBotChat = bot.chat.bind(bot);
-        bot.chat = (message) => {
-            const text = String(message ?? "");
-            if (apiResponseCapture && !apiCaptureAllowChat && !text.startsWith("/")) {
-                apiResponseCapture.push(text);
-                return;
-            }
-            return originalBotChat(text);
-        };
+        const originalBotChat = typeof bot.chat === "function" ? bot.chat.bind(bot) : null;
+        if (originalBotChat) {
+            bot.chat = (message) => {
+                const text = String(message ?? "");
+                if (apiResponseCapture && !apiCaptureAllowChat && !text.startsWith("/")) {
+                    apiResponseCapture.push(text);
+                    return;
+                }
+                return originalBotChat(text);
+            };
+        }
 
         hasAttemptedLogin = false;
 
