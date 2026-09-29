@@ -560,6 +560,15 @@ public class AydreamScreen extends Screen {
                 List<String> messages = extractJsonStringArray(response.body(), "messages");
                 actionResponses = messages;
                 actionMessage = "Done: " + command;
+                if (!messages.isEmpty()) {
+                    MinecraftClient.getInstance().execute(() -> {
+                        if (MinecraftClient.getInstance().player != null) {
+                            for (String message : messages) {
+                                MinecraftClient.getInstance().player.sendMessage(Text.literal("[Aydream] " + message), false);
+                            }
+                        }
+                    });
+                }
             } else {
                 actionResponses = List.of();
                 actionMessage = "Action failed";
