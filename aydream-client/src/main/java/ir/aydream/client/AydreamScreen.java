@@ -90,7 +90,12 @@ public class AydreamScreen extends Screen {
         addButton(columns[1], panelY + 116, buttonW, 30, "Inventory", () -> open("inventory"));
         addButton(columns[2], panelY + 116, buttonW, 30, "Info", () -> open("info"));
 
-        addButton(columns[0], panelY + 170, buttonW, 30, "Quick Follow", () -> apiAction("!follow"));
+        if (!nearbyPlayers.isEmpty()) {
+            String quickFollowPlayer = extractPlayerName(nearbyPlayers.get(0));
+            addButton(columns[0], panelY + 170, buttonW, 30, "Quick Follow", () -> apiAction("!follow " + quickFollowPlayer));
+        } else {
+            addButton(columns[0], panelY + 170, buttonW, 30, "Quick Follow", () -> {});
+        }
         addButton(columns[1], panelY + 170, buttonW, 30, "Stop Everything", () -> apiAction("!clear"));
         addButton(columns[2], panelY + 170, buttonW, 30, "Refresh", this::forceRefresh);
         addButton(columns[0], panelY + 208, buttonW, 30, "Settings", () -> open("settings"));
@@ -296,7 +301,7 @@ public class AydreamScreen extends Screen {
         addButton(left, top, 185, 30, "Follow", () -> apiAction("!follow " + player));
         addButton(left + 200, top, 185, 30, "Come", () -> apiAction("!come " + player));
         addButton(left, top + 40, 185, 30, "Attack", () -> apiAction("!attack " + player));
-        addButton(left + 200, top + 40, 185, 30, "Look At", () -> apiAction("!lookat " + player));
+        addButton(left + 200, top + 40, 185, 30, "Look At", () -> apiAction("!look " + player));
         addButton(left, top + 80, 185, 30, "Stop", () -> apiAction("!stop"));
         addButton(left + 200, top + 80, 185, 30, "Back", () -> open("players"));
     }
