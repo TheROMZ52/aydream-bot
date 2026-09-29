@@ -3945,7 +3945,7 @@ function setSkin(value, notify) {
                 const last = socialReplyCooldowns.get(username) || 0;
                 if (now - last >= 30000 && /^(hi|hello|hey|سلام|درود|salam)\b/i.test(lower)) {
                     socialReplyCooldowns.set(username, now);
-                    const replies = ["Hey " + mention(username) + "!", "Hi " + mention(username) + ".", "سلام " + mention(username) + " 👋"];
+                    const replies = ["Hey " + mention(username) + "!", "Hi " + mention(username) + ".", "سلام " + mention(username) + "."];
                     bot.chat(replies[Math.floor(Math.random() * replies.length)]);
                 }
                 return;
@@ -3981,6 +3981,9 @@ function setSkin(value, notify) {
 
                 const rawMessage = String(message || "").trim();
                 const lowerMessage = rawMessage.toLowerCase();
+                const botName = String(bot?.username || USERNAME || "");
+                const escapedBotName = botName.replace(/[.*+?^${}()|[\]\\]/g, "\\                const rawMessage = String(message || "").trim();
+                const lowerMessage = rawMessage.toLowerCase();
                 if (username !== CONTROLLER && !lowerMessage.startsWith("!")) {
                     if (/^(hi|hello|hey|سلام|درود|salam)\b/i.test(rawMessage)) {
                         const now = Date.now();
@@ -3993,6 +3996,31 @@ function setSkin(value, notify) {
                                 });
                         }
                     }
+                    return;
+                }");
+                const mentionPattern = escapedBotName
+                    ? new RegExp("(^|[\\s.,:;!?])@" + escapedBotName + "($|[\\s.,:;!?])", "i")
+                    : null;
+                const isMentioned = Boolean(mentionPattern && mentionPattern.test(rawMessage));
+                const cleanMessage = escapedBotName
+                    ? rawMessage.replace(new RegExp("@" + escapedBotName, "ig"), "").trim()
+                    : rawMessage;
+
+                if (!lowerMessage.startsWith("!")) {
+                    const shouldReply = username.toLowerCase() === CONTROLLER.toLowerCase() || isMentioned;
+
+                    if (shouldReply) {
+                        const now = Date.now();
+                        const last = socialReplyCooldowns.get(username) || 0;
+                        if (now - last >= 30000 && cleanMessage) {
+                            socialReplyCooldowns.set(username, now);
+                            generateReply("به " + username + " پاسخ بده: " + cleanMessage, "polite", true)
+                                .then((reply) => {
+                                    if (reply && bot?.entity) bot.chat(reply);
+                                });
+                        }
+                    }
+
                     return;
                 }
 
