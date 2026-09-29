@@ -336,7 +336,7 @@ public class AydreamScreen extends Screen {
     }
 
     private void buildHomes() {
-        int left = 215;
+        int left = contentLeft() + 15;
         int top = 92;
         addButton(left, top, 185, 28, "Save Current", () -> apiAction("!sethome"));
         addButton(left + 195, top, 185, 28, "Refresh", this::forceRefresh);
@@ -359,7 +359,7 @@ public class AydreamScreen extends Screen {
     }
 
     private void buildAutomation() {
-        int left = 215;
+        int left = contentLeft() + 15;
         int top = 92;
         addButton(left, top, 185, 28, "Auto Eat", () -> apiAction("!eat"));
         addButton(left + 195, top, 185, 28, "Autopilot On", () -> apiAction("!autopilot on"));
@@ -372,7 +372,7 @@ public class AydreamScreen extends Screen {
     }
 
     private void buildActivity() {
-        int left = 215;
+        int left = contentLeft() + 15;
         int top = 92;
         addButton(left, top, 185, 28, "Refresh", this::forceRefresh);
         addButton(left + 195, top, 185, 28, "Stop", () -> apiAction("!stop"));
@@ -382,7 +382,7 @@ public class AydreamScreen extends Screen {
 
     private void buildInventory() {
         if (inventoryItems.isEmpty()) refreshInventory();
-        int left = 215;
+        int left = contentLeft() + 15;
         int top = 92;
 
         addButton(left, top, 190, 28, "Refresh Inventory", this::refreshInventory);
@@ -467,7 +467,7 @@ public class AydreamScreen extends Screen {
     }
 
     private void buildUpdates() {
-        int left = 235;
+        int left = contentLeft() + 35;
         int top = 98;
         contextText = "Automatic update check uses the Aydream GitHub release.";
         if (updateInfo.available()) {
@@ -511,7 +511,7 @@ public class AydreamScreen extends Screen {
     }
 
     private void buildSettings() {
-        int left = 235;
+        int left = contentLeft() + 35;
         int top = 98;
         int w = Math.min(430, width - left - 40);
 
