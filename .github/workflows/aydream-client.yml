@@ -39,6 +39,9 @@ jobs:
           else
             gh release edit latest --repo "$GITHUB_REPOSITORY" --title "Aydream Latest" --notes "version=$VERSION" --latest
           fi
+          JAR=$(find aydream-client/build/libs -maxdepth 1 -type f -name "AydreamClient-*.jar" ! -name "*sources*" | head -n 1)
+          test -n "$JAR"
+          cp "$JAR" aydream-client/build/libs/AydreamClient.jar
           gh release upload latest aydream-client/build/libs/AydreamClient.jar --repo "$GITHUB_REPOSITORY" --clobber
       - uses: actions/upload-artifact@v4
         with:
