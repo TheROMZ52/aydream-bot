@@ -8,7 +8,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.function.Consumer;
 
@@ -45,7 +44,9 @@ public final class AydreamUpdater {
                     .header("User-Agent", "AydreamClient")
                     .GET()
                     .build();
-                String body = client.send(request, HttpResponse.BodyHandlers.ofString()).body();
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() != 200) throw new IllegalStateException("Release check failed");
+                String body = response.body();
                 String version = extractReleaseVersion(body);
                 String url = extractAssetField(body, "browser_download_url");
                 String digest = extractAssetField(body, "digest");
@@ -105,17 +106,16 @@ public final class AydreamUpdater {
         String scriptPath = script.toAbsolutePath().toString().replace("'", "''");
         String content = "@echo off\r\n"
             + "timeout /t 3 /nobreak >nul\r\n"
-            + "powershell -NoProfile -ExecutionPolicy Bypass -Command "Copy-Item -LiteralPath '" + sourcePath + "' -Destination '" + targetPath + "' -Force"\r\n"
-            + "del /f /q "" + scriptPath + ""\r\n";
+            + "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Copy-Item -LiteralPath '" + sourcePath + "' -Destination '" + targetPath + "' -Force\"\r\n"
+            + "del /f /q \"" + scriptPath + "\"\r\n";
         Files.writeString(script, content);
         new ProcessBuilder("cmd", "/c", "start", "", "/b", script.toAbsolutePath().toString()).start();
     }
 
     private static String extractReleaseVersion(String body) {
-        String marker = "\"version=\"";
-        int index = body.indexOf(marker);
+        int index = body.indexOf("\"version=");
         if (index >= 0) {
-            int start = index + marker.length();
+            int start = index + 9;
             int end = body.indexOf("\"", start);
             if (end > start) return body.substring(start, end);
         }
@@ -124,14 +124,20 @@ public final class AydreamUpdater {
     }
 
     private static String extractAssetField(String body, String field) {
-        int asset = body.indexOf("\"name\":\"" + ASSET_NAME + "\"");
+        int asset = body.indexOf(ASSET_NAME);
         if (asset < 0) return "";
-        return extractField(body.substring(asset), field);
+        int objectStart = body.lastIndexOf("{", asset);
+        if (objectStart < 0) objectStart = 0;
+        return extractField(body.substring(objectStart), field);
     }
 
     private static String extractField(String body, String field) {
         String marker = "\"" + field + "\":\"";
         int index = body.indexOf(marker);
+        if (index < 0) {
+            marker = "\"" + field + "\": \"";
+            index = body.indexOf(marker);
+        }
         if (index < 0) return "";
         int start = index + marker.length();
         int end = body.indexOf("\"", start);
