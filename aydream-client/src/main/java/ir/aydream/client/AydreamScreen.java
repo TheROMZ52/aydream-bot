@@ -44,7 +44,6 @@ public class AydreamScreen extends Screen {
     private volatile String updateMessage = "";
     private long nextRefresh = 0L;
     private long nextUpdateCheck = 0L;
-    private long nextUpdateCheck = 0L;
 
     private static final int PANEL = 0xD91A1D26;
     private static final int PANEL_LIGHT = 0xE0262935;
