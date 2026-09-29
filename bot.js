@@ -4001,11 +4001,18 @@ function setSkin(value, notify) {
                 const rawMessage = String(message || "").trim();
                 const lowerMessage = rawMessage.toLowerCase();
                 const botName = String(bot?.username || USERNAME || "").trim();
+                const escapedBotName = botName.replace(/[.*+?^${}()|[\\]\\]/g, "\\                const botName = String(bot?.username || USERNAME || "").trim();
                 const isMentioned = botName
                     ? new RegExp("(^|[\\s.,:;!?])@" + botName + "($|[\\s.,:;!?])", "i").test(rawMessage)
                     : false;
                 const cleanMessage = botName
                     ? rawMessage.replace(new RegExp("@" + botName, "ig"), "").trim()
+                    : rawMessage;");
+                const isMentioned = botName
+                    ? new RegExp("(^|[\\s.,:;!?])@" + escapedBotName + "($|[\\s.,:;!?])", "i").test(rawMessage)
+                    : false;
+                const cleanMessage = botName
+                    ? rawMessage.replace(new RegExp("@" + escapedBotName, "ig"), "").trim()
                     : rawMessage;
 
                 if (!lowerMessage.startsWith("!")) {
