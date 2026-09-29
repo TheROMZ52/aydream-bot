@@ -459,6 +459,28 @@ async function runSetupPanel() {
     let API_TOKEN = process.env.AYDREAM_API_TOKEN || "";
     let apiSecurity = null;
     let apiCommandHandler = null;
+    let interactiveChatAvailable = false;
+
+    function detectInteractiveChat() {
+        if (!bot?.entity) return;
+        interactiveChatAvailable = false;
+        try {
+            bot.chat("/version InteractiveChat");
+        } catch {}
+    }
+
+    function sendPrivateReply(username, message) {
+        if (!bot?.entity || !username || !message) return;
+        const text = String(message).slice(0, 240);
+        try {
+            if (interactiveChatAvailable) {
+                bot.chat("/tell " + username + " " + text);
+            } else {
+                bot.whisper(username, text);
+            }
+        } catch {}
+    }
+
 
     function loadApiToken() {
         if (!API_TOKEN.trim()) {
@@ -3686,6 +3708,8 @@ function setSkin(value, notify) {
             log(`[+] Version: ${bot.version}`);
             log(`[+] Controller: ${CONTROLLER}`);
 
+            detectInteractiveChat();
+
             // ====================================
             // Pathfinder
             // ====================================
@@ -3965,7 +3989,7 @@ function setSkin(value, notify) {
                             socialReplyCooldowns.set(username, now);
                             generateReply("به " + username + " جواب بده: " + rawMessage, "polite", true)
                                 .then((reply) => {
-                                    if (reply && bot?.entity) bot.chat(reply.slice(0, 240));
+                                    if (reply && bot?.entity) sendPrivateReply(username, reply);
                                 });
                         }
                     }
