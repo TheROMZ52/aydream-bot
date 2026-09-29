@@ -1,78 +1,18 @@
 @echo off
-setlocal EnableDelayedExpansion
+setlocal
 cd /d "%~dp0"
 
 set "REPO=TheROMZ52/aydream-bot"
-set "TMP=%TEMP%\aydream_workflows_%RANDOM%.txt"
 
-gh workflow list --repo "%REPO%" --json name,path,state > "%TMP%"
+powershell -NoProfile -Command "$ErrorActionPreference='Stop'; $w = @(gh workflow list --repo '%REPO%' --json name,path,state | ConvertFrom-Json); if($w.Count -eq 0){Write-Host 'No workflows found.'; exit 1}; $i=0; [Console]::CursorVisible=$false; try { while($true){ Clear-Host; Write-Host 'Aydream GitHub Actions'; Write-Host '====================='; Write-Host 'Use Up/Down arrows, then press Enter.'; Write-Host ''; for($n=0;$n -lt $w.Count;$n++){ if($n -eq $i){ Write-Host ('> ' + $w[$n].name + ' [' + $w[$n].state + ']') } else { Write-Host ('  ' + $w[$n].name + ' [' + $w[$n].state + ']') } }; $k=[Console]::ReadKey($true); if($k.Key -eq 'UpArrow'){$i=($i-1+$w.Count)%$w.Count}; if($k.Key -eq 'DownArrow'){$i=($i+1)%$w.Count}; if($k.Key -eq 'Enter'){break} } } finally {[Console]::CursorVisible=$true}; Clear-Host; Write-Host ('Running: ' + $w[$i].name); gh workflow run $w[$i].path --repo '%REPO%' --ref main; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; Write-Host ''; Write-Host 'Workflow started successfully.'"
 if errorlevel 1 (
-  echo Failed to load workflows.
+  echo.
+  echo Failed to start workflow.
   echo Make sure GitHub CLI is installed and authenticated.
   pause
   exit /b 1
 )
 
-for /f "delims=" %%A in ('powershell -NoProfile -Command "$x=Get-Content -Raw '%TMP%' ^| ConvertFrom-Json; $x ^| ForEach-Object { '{0}^|{1}^|{2}' -f $_.name,$_.path,$_.state }"') do (
-  set /a COUNT+=1
-  for /f "tokens=1-3 delims=|" %%a in ("%%A") do (
-    set "NAME!COUNT!=%%a"
-    set "PATH!COUNT!=%%b"
-    set "STATE!COUNT!=%%c"
-  )
-)
-
-del "%TMP%" >nul 2>&1
-
-if not defined COUNT (
-  echo No workflows found.
-  pause
-  exit /b 1
-)
-
-set "SELECTED=1"
-
-:menu
-cls
-echo Aydream GitHub Actions
-echo =====================
-echo Use Up/Down arrows, then press Enter.
 echo.
-
-for /l %%I in (1,1,%COUNT%) do (
-  if %%I==!SELECTED! (
-    echo ^> !NAME%%I! [!STATE%%I!]
-  ) else (
-    echo   !NAME%%I! [!STATE%%I!]
-  )
-)
-
-choice /c JK H /n /m " [Up=J  Down=K  Enter=H] "
-if errorlevel 3 goto run
-if errorlevel 2 (
-  set /a SELECTED+=1
-  if !SELECTED! GTR !COUNT! set "SELECTED=1"
-  goto menu
-)
-if errorlevel 1 (
-  set /a SELECTED-=1
-  if !SELECTED! LSS 1 set "SELECTED=%COUNT%"
-  goto menu
-)
-
-:run
-cls
-echo Running: !NAME%SELECTED%!
-echo.
-gh workflow run "!PATH%SELECTED%!" --repo "%REPO%" --ref main
-if errorlevel 1 (
-  echo.
-  echo Failed to start workflow.
-  pause
-  exit /b 1
-)
-
-echo.
-echo Workflow started successfully.
 pause
 exit /b 0
