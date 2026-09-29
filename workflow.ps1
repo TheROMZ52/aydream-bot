@@ -4,13 +4,13 @@ $ErrorActionPreference = "Stop"
 $repo = "TheROMZ52/aydream-bot"
 
 try {
-    $raw = gh workflow list --repo $repo --all --json name,path,state 2>&1
+    $output = @(gh workflow list --repo $repo --all --json name,path,state 2>&1)
     if ($LASTEXITCODE -ne 0) {
-        throw ($raw -join [Environment]::NewLine)
+        throw ($output -join [Environment]::NewLine)
     }
 
-    $json = ($raw -join "")
-    $workflows = @(ConvertFrom-Json -InputObject $json)
+    $json = $output -join [Environment]::NewLine
+    $workflows = @($json | ConvertFrom-Json)
 
     if ($workflows.Count -eq 0) {
         Write-Host "No workflows found." -ForegroundColor Red
@@ -38,10 +38,8 @@ try {
                 Write-Host ("> " + $line.TrimStart()) -ForegroundColor White -BackgroundColor DarkBlue
             } elseif ($state -eq "active") {
                 Write-Host $line -ForegroundColor Green
-            } elseif ($state -like "disabled*") {
-                Write-Host $line -ForegroundColor Red
             } else {
-                Write-Host $line -ForegroundColor Gray
+                Write-Host $line -ForegroundColor DarkGray
             }
         }
 
