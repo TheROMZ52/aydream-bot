@@ -2,9 +2,9 @@
 
 The panel controls the Aydream GitHub Actions runner.
 
-## GitHub Actions secrets
+## GitHub Actions variables
 
-Add these repository secrets under Settings > Secrets and variables > Actions:
+Add these repository variables under Settings > Secrets and variables > Actions:
 
 - AYDREAM_HOST
 - AYDREAM_PORT
