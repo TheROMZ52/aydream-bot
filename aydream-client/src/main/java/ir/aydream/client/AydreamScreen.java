@@ -675,7 +675,7 @@ public class AydreamScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        renderBackground(context, mouseX, mouseY, delta);
+        context.fill(0, 0, width, height, 0xFF0B0D12);
         refreshStatus();
 
         int mainX = category.equals("dashboard") ? width / 2 - 330 : 195;
