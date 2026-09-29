@@ -587,7 +587,7 @@ public class AydreamScreen extends Screen {
             }
             if (escaped) {
                 current.append(switch (ch) {
-                    case "\" -> "\\";
+                    case '\\' -> '\\';
                     case "\"" -> "\"";
                     case "n" -> "\n";
                     case "r" -> "\r";
