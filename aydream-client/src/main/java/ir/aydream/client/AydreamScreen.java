@@ -582,22 +582,22 @@ public class AydreamScreen extends Screen {
         for (int i = 0; i < array.length(); i++) {
             char ch = array.charAt(i);
             if (current == null) {
-                if (ch == "\"") current = new StringBuilder();
+                if (ch == '"') current = new StringBuilder();
                 continue;
             }
             if (escaped) {
                 current.append(switch (ch) {
                     case '\\' -> '\\';
                     case "\"" -> "\"";
-                    case "n" -> "\n";
-                    case "r" -> "\r";
-                    case "t" -> "\t";
+                    case 'n' -> '\n';
+                    case 'r' -> '\r';
+                    case 't' -> '\t';
                     default -> ch;
                 });
                 escaped = false;
-            } else if (ch == "\\") {
+            } else if (ch == '\\') {
                 escaped = true;
-            } else if (ch == "\"") {
+            } else if (ch == '"') {
                 values.add(current.toString());
                 current = null;
             } else {
