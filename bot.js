@@ -4005,12 +4005,18 @@ function setSkin(value, notify) {
                 const isMentioned = botName
                     ? new RegExp("(^|[\\s.,:;!?])@" + escapedBotName + "($|[\\s.,:;!?])", "i").test(rawMessage)
                     : false;
-                const cleanMessage = botName
-                    ? rawMessage.replace(new RegExp("@" + escapedBotName, "ig"), "").trim()
-                    : rawMessage;
+                const aydreamTriggerPattern = /(^|[\s.,:;!?])(?:دریم|aydream)(?:@(?=[^\s.,:;!?]+))?(?=$|[\s.,:;!?])/iu;
+                const isAydreamTriggered = aydreamTriggerPattern.test(rawMessage);
+                const cleanMessage = rawMessage
+                    .replace(new RegExp("@" + escapedBotName, "ig"), "")
+                    .replace(aydreamTriggerPattern, " ")
+                    .trim();
 
                 if (!lowerMessage.startsWith("!")) {
-                    const shouldReply = username.toLowerCase() === CONTROLLER.toLowerCase() || isMentioned;
+                    const shouldReply =
+                        username.toLowerCase() === CONTROLLER.toLowerCase() ||
+                        isMentioned ||
+                        isAydreamTriggered;
 
                     if (shouldReply) {
                         const now = Date.now();
