@@ -3981,29 +3981,12 @@ function setSkin(value, notify) {
 
                 const rawMessage = String(message || "").trim();
                 const lowerMessage = rawMessage.toLowerCase();
-                const botName = String(bot?.username || USERNAME || "");
-                const escapedBotName = botName.replace(/[.*+?^${}()|[\]\\]/g, "\\                const rawMessage = String(message || "").trim();
-                const lowerMessage = rawMessage.toLowerCase();
-                if (username !== CONTROLLER && !lowerMessage.startsWith("!")) {
-                    if (/^(hi|hello|hey|سلام|درود|salam)\b/i.test(rawMessage)) {
-                        const now = Date.now();
-                        const last = socialReplyCooldowns.get(username) || 0;
-                        if (now - last >= 30000) {
-                            socialReplyCooldowns.set(username, now);
-                            generateReply("به " + username + " جواب بده: " + rawMessage, "polite", true)
-                                .then((reply) => {
-                                    if (reply && bot?.entity) bot.chat(reply);
-                                });
-                        }
-                    }
-                    return;
-                }");
-                const mentionPattern = escapedBotName
-                    ? new RegExp("(^|[\\s.,:;!?])@" + escapedBotName + "($|[\\s.,:;!?])", "i")
-                    : null;
-                const isMentioned = Boolean(mentionPattern && mentionPattern.test(rawMessage));
-                const cleanMessage = escapedBotName
-                    ? rawMessage.replace(new RegExp("@" + escapedBotName, "ig"), "").trim()
+                const botName = String(bot?.username || USERNAME || "").trim();
+                const isMentioned = botName
+                    ? new RegExp("(^|[\\s.,:;!?])@" + botName + "($|[\\s.,:;!?])", "i").test(rawMessage)
+                    : false;
+                const cleanMessage = botName
+                    ? rawMessage.replace(new RegExp("@" + botName, "ig"), "").trim()
                     : rawMessage;
 
                 if (!lowerMessage.startsWith("!")) {
