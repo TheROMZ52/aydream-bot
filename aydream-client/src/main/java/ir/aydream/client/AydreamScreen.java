@@ -45,8 +45,12 @@ public class AydreamScreen extends Screen {
     private static final int PANEL_LIGHT = 0xE0262935;
     private static final int GLASS = 0xB82A2E3A;
     private static final int ACCENT = 0xFF8B5CF6;
+    private static final int ACCENT_SOFT = 0x338B5CF6;
     private static final int TEXT = 0xFFF5F5F7;
     private static final int MUTED = 0xFF9FA3B2;
+
+    private static final String[] SIDEBAR_LABELS = {"Dashboard", "Players", "Movement", "Combat", "Homes", "Automation", "Activity", "Inventory", "Info", "Settings"};
+    private static final String[] SIDEBAR_VALUES = {"dashboard", "players", "movement", "combat", "homes", "automation", "activity", "inventory", "info", "settings"};
 
     public AydreamScreen(Screen parent) {
         super(Text.literal("Aydream Client"));
@@ -106,15 +110,16 @@ public class AydreamScreen extends Screen {
     private void buildSidebar() {
         int x = 28;
         int y = 65;
-        int spacing = height < 430 ? 29 : 34;
+        int spacing = sidebarSpacing();
 
-        String[] labels = {"Dashboard", "Players", "Movement", "Combat", "Homes", "Automation", "Activity", "Inventory", "Info", "Settings"};
-        String[] values = {"dashboard", "players", "movement", "combat", "homes", "automation", "activity", "inventory", "info", "settings"};
-
-        for (int i = 0; i < labels.length; i++) {
-            String value = values[i];
-            addButton(x, y + i * spacing, 150, 28, labels[i], () -> open(value));
+        for (int i = 0; i < SIDEBAR_LABELS.length; i++) {
+            String value = SIDEBAR_VALUES[i];
+            addButton(x, y + i * spacing, 150, 28, SIDEBAR_LABELS[i], () -> open(value));
         }
+    }
+
+    private int sidebarSpacing() {
+        return height < 430 ? 29 : 34;
     }
 
     private void buildCategory() {
@@ -680,10 +685,25 @@ public class AydreamScreen extends Screen {
 
         context.fill(mainX, mainY, mainX + mainW, mainY + mainH, PANEL);
         context.fill(mainX + 1, mainY + 1, mainX + mainW - 1, mainY + 55, GLASS);
+        // accent strip on top of the main panel + divider under the header
+        context.fill(mainX, mainY, mainX + mainW, mainY + 2, ACCENT);
+        context.fill(mainX + 24, mainY + 56, mainX + mainW - 24, mainY + 57, ACCENT_SOFT);
 
         if (!category.equals("dashboard")) {
             context.fill(20, 48, 185, mainY + mainH, PANEL);
             context.fill(21, 49, 184, 86, GLASS);
+            context.fill(20, 48, 185, 50, ACCENT);
+
+            // highlight the active sidebar tab (drawn behind the buttons)
+            String activeValue = category.startsWith("player:") ? "players" : category;
+            for (int i = 0; i < SIDEBAR_VALUES.length; i++) {
+                if (SIDEBAR_VALUES[i].equals(activeValue)) {
+                    int tabY = 65 + i * sidebarSpacing();
+                    context.fill(24, tabY - 2, 182, tabY + 30, ACCENT_SOFT);
+                    context.fill(24, tabY - 2, 27, tabY + 30, ACCENT);
+                    break;
+                }
+            }
         }
 
         context.drawText(textRenderer, Text.literal("Aydream"), mainX + 24, mainY + 18, TEXT, true);

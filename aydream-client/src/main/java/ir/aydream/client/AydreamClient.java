@@ -34,7 +34,12 @@ public class AydreamClient implements ClientModInitializer {
         dispatcher.register(
             literal("dream")
                 .executes(context -> {
-                    MinecraftClient.getInstance().setScreen(new AydreamScreen(null));
+                    MinecraftClient client = MinecraftClient.getInstance();
+                    // IMPORTANT: client.send() queues the task for the NEXT tick.
+                    // client.execute() runs immediately when already on the render thread,
+                    // and then the chat screen closes itself and wipes our screen
+                    // (that was why /dream showed nothing, with no error).
+                    client.send(() -> client.setScreen(new AydreamScreen(null)));
                     return 1;
                 })
                 .then(literal("help").executes(context -> {
@@ -54,6 +59,7 @@ public class AydreamClient implements ClientModInitializer {
     }
 
     private void sendCommand(FabricClientCommandSource source, String command) {
+        loadConfig();
         if (apiToken.isBlank()) {
             source.sendFeedback(Text.literal("Aydream API token is not configured. Open /dream and set it in Settings."));
             return;
