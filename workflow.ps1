@@ -11,7 +11,7 @@ try {
 
     $workflows = @($json | ConvertFrom-Json)
     if ($workflows.Count -eq 0) {
-        Write-Host "No workflows found."
+        Write-Host "No workflows found." -ForegroundColor Red
         exit 1
     }
 
@@ -19,16 +19,30 @@ try {
 
     :menu while ($true) {
         Clear-Host
-        Write-Host "Aydream GitHub Actions"
-        Write-Host "====================="
-        Write-Host "Use Up/Down arrows, then press Enter. Press Esc to cancel."
+        Write-Host ""
+        Write-Host "  Aydream GitHub Actions" -ForegroundColor Cyan
+        Write-Host "  =====================" -ForegroundColor DarkCyan
+        Write-Host ""
+        Write-Host "  ↑ / ↓  Select workflow" -ForegroundColor Gray
+        Write-Host "  Enter  Run workflow" -ForegroundColor Green
+        Write-Host "  Esc    Cancel" -ForegroundColor Yellow
         Write-Host ""
 
         for ($n = 0; $n -lt $workflows.Count; $n++) {
-            if ($n -eq $selectedIndex) {
-                Write-Host ("> " + $workflows[$n].name + " [" + $workflows[$n].state + "]")
+            $state = $workflows[$n].state
+
+            if ($state -eq "active") {
+                $stateColor = "Green"
             } else {
-                Write-Host ("  " + $workflows[$n].name + " [" + $workflows[$n].state + "]")
+                $stateColor = "DarkGray"
+            }
+
+            if ($n -eq $selectedIndex) {
+                Write-Host ("  > " + $workflows[$n].name) -ForegroundColor White -BackgroundColor DarkBlue -NoNewline
+                Write-Host ("  [" + $state + "]") -ForegroundColor $stateColor -BackgroundColor DarkBlue
+            } else {
+                Write-Host ("    " + $workflows[$n].name) -ForegroundColor White -NoNewline
+                Write-Host ("  [" + $state + "]") -ForegroundColor $stateColor
             }
         }
 
@@ -59,23 +73,25 @@ try {
     $selected = $workflows[$selectedIndex]
 
     Clear-Host
-    Write-Host ("Running: " + $selected.name)
+    Write-Host ""
+    Write-Host "  ▶ Running workflow" -ForegroundColor Cyan
+    Write-Host "  $($selected.name)" -ForegroundColor White
     Write-Host ""
 
     gh workflow run $selected.path --repo $repo --ref main
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
-        Write-Host "Failed to start workflow."
+        Write-Host "  ✖ Failed to start workflow." -ForegroundColor Red
         exit $LASTEXITCODE
     }
 
     Write-Host ""
-    Write-Host "Workflow started successfully."
+    Write-Host "  ✔ Workflow started successfully." -ForegroundColor Green
 }
 catch {
     Write-Host ""
-    Write-Host "Error:"
-    Write-Host $_.Exception.Message
+    Write-Host "  ✖ Error:" -ForegroundColor Red
+    Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow
     exit 1
 }
