@@ -8,6 +8,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.security.MessageDigest;
 import java.util.function.Consumer;
 
@@ -49,10 +50,11 @@ public final class AydreamUpdater {
                 String body = response.body();
                 String version = extractReleaseVersion(body);
                 String url = extractAssetField(body, "browser_download_url");
+                if (url.isBlank()) url = "https://github.com/TheROMZ52/aydream-bot/releases/download/latest/" + ASSET_NAME;
                 String digest = extractAssetField(body, "digest");
                 callback.accept(new UpdateInfo(version, url, digest, true));
             } catch (Exception error) {
-                callback.accept(new UpdateInfo("", "", "", true));
+                callback.accept(new UpdateInfo("", "", "", false));
             }
         });
     }
@@ -83,7 +85,7 @@ public final class AydreamUpdater {
                 }
                 callback.accept("Update downloaded");
             } catch (Exception error) {
-                callback.accept("Update failed");
+                callback.accept("Update failed: " + (error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage()));
             }
         });
     }
@@ -98,8 +100,9 @@ public final class AydreamUpdater {
     public static void scheduleReplacement(Path runDir, String version) throws Exception {
         Path updateDir = runDir.resolve("mods").resolve(".aydream-update");
         Path source = updateDir.resolve(ASSET_NAME);
-        Path target = runDir.resolve("mods").resolve(ASSET_NAME);
         if (!Files.exists(source)) throw new IllegalStateException("Update not downloaded");
+        Path modsDir = runDir.resolve("mods");
+        Path target = findInstalledJar(modsDir);
         Path script = updateDir.resolve("apply-update.bat");
         String sourcePath = source.toAbsolutePath().toString().replace("'", "''");
         String targetPath = target.toAbsolutePath().toString().replace("'", "''");
@@ -110,6 +113,19 @@ public final class AydreamUpdater {
             + "del /f /q \"" + scriptPath + "\"\r\n";
         Files.writeString(script, content);
         new ProcessBuilder("cmd", "/c", "start", "", "/b", script.toAbsolutePath().toString()).start();
+    }
+
+    private static Path findInstalledJar(Path modsDir) throws Exception {
+        Files.createDirectories(modsDir);
+        Path fixed = modsDir.resolve(ASSET_NAME);
+        if (Files.exists(fixed)) return fixed;
+        try (var stream = Files.list(modsDir)) {
+            return stream
+                .filter(path -> path.getFileName().toString().matches("AydreamClient(?:-[^/]+)?\\.jar"))
+                .sorted(Comparator.comparing(path -> path.getFileName().toString()))
+                .findFirst()
+                .orElse(fixed);
+        }
     }
 
     private static String extractReleaseVersion(String body) {
