@@ -51,6 +51,9 @@ function formatLogArg(value) {
 function log(...args) {
     const text = args.map(formatLogArg).join(" ");
     process.stdout.write(text + "\n");
+    if (apiResponseCapture) {
+        apiResponseCapture.push(text);
+    }
     try {
         if (!logRotationInProgress && fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size >= LOG_MAX_BYTES) {
             logRotationInProgress = true;
@@ -459,28 +462,8 @@ async function runSetupPanel() {
     let API_TOKEN = process.env.AYDREAM_API_TOKEN || "";
     let apiSecurity = null;
     let apiCommandHandler = null;
-    let interactiveChatAvailable = false;
-
-    function detectInteractiveChat() {
-        if (!bot?.entity) return;
-        interactiveChatAvailable = false;
-        try {
-            bot.chat("/version InteractiveChat");
-        } catch {}
-    }
-
-    function sendPrivateReply(username, message) {
-        if (!bot?.entity || !username || !message) return;
-        const text = String(message).slice(0, 240);
-        try {
-            if (interactiveChatAvailable) {
-                bot.chat("/tell " + username + " " + text);
-            } else {
-                bot.whisper(username, text);
-            }
-        } catch {}
-    }
-
+    let apiResponseCapture = null;
+    let apiCaptureAllowChat = false;
 
     function loadApiToken() {
         if (!API_TOKEN.trim()) {
@@ -635,15 +618,24 @@ async function runSetupPanel() {
                             return;
                         }
 
+                        apiResponseCapture = [];
+                        apiCaptureAllowChat = command.toLowerCase() === "!say";
                         try {
                             await apiCommandHandler(command);
                             markActivity();
+                            const messages = [...new Set(apiResponseCapture)].filter(Boolean).slice(-20);
                             res.writeHead(200);
-                            res.end(JSON.stringify({ ok: true }));
+                            res.end(JSON.stringify({
+                                ok: true,
+                                messages: messages.length ? messages : ["Command completed."]
+                            }));
                         } catch (error) {
                             log("[API COMMAND ERROR]", error.message || error);
                             res.writeHead(503);
                             res.end(JSON.stringify({ error: "command failed" }));
+                        } finally {
+                            apiResponseCapture = null;
+                            apiCaptureAllowChat = false;
                         }
                     } catch (error) {
                         res.writeHead(400);
@@ -3660,6 +3652,16 @@ function setSkin(value, notify) {
             auth: "offline"
         });
 
+        const originalBotChat = bot.chat.bind(bot);
+        bot.chat = (message) => {
+            const text = String(message ?? "");
+            if (apiResponseCapture && !apiCaptureAllowChat && !text.startsWith("/")) {
+                apiResponseCapture.push(text);
+                return;
+            }
+            return originalBotChat(text);
+        };
+
         hasAttemptedLogin = false;
 
         bot.loadPlugin(pathfinder);
@@ -3707,8 +3709,6 @@ function setSkin(value, notify) {
             log(`[+] Server: ${HOST}:${PORT}`);
             log(`[+] Version: ${bot.version}`);
             log(`[+] Controller: ${CONTROLLER}`);
-
-            detectInteractiveChat();
 
             // ====================================
             // Pathfinder
@@ -3989,7 +3989,7 @@ function setSkin(value, notify) {
                             socialReplyCooldowns.set(username, now);
                             generateReply("به " + username + " جواب بده: " + rawMessage, "polite", true)
                                 .then((reply) => {
-                                    if (reply && bot?.entity) sendPrivateReply(username, reply);
+                                    if (reply && bot?.entity) bot.chat(reply);
                                 });
                         }
                     }
