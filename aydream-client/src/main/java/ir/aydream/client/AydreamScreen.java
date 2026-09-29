@@ -40,6 +40,8 @@ public class AydreamScreen extends Screen {
     private volatile List<String> actionResponses = List.of();
     private volatile String lastActivity = "--";
     private volatile String botBusy = "--";
+    private volatile AydreamUpdater.UpdateInfo updateInfo = AydreamUpdater.UpdateInfo.none();
+    private volatile String updateMessage = "";
     private long nextRefresh = 0L;
 
     private static final int PANEL = 0xD91A1D26;
@@ -99,6 +101,7 @@ public class AydreamScreen extends Screen {
         addButton(columns[1], panelY + 170, buttonW, 30, "Stop Everything", () -> apiAction("!clear"));
         addButton(columns[2], panelY + 170, buttonW, 30, "Refresh", this::forceRefresh);
         addButton(columns[0], panelY + 208, buttonW, 30, "Settings", () -> open("settings"));
+        addButton(columns[1], panelY + 246, buttonW, 30, "Updates", this::openUpdates);
         addButton(columns[1], panelY + 208, buttonW, 30, "Players", () -> open("players"));
         if (!nearbyPlayers.isEmpty()) {
             String player = extractPlayerName(nearbyPlayers.get(0));
@@ -140,6 +143,10 @@ public class AydreamScreen extends Screen {
         }
         if (category.equals("settings")) {
             buildSettings();
+            return;
+        }
+        if (category.equals("updates")) {
+            buildUpdates();
             return;
         }
         if (category.equals("players")) {
@@ -417,6 +424,63 @@ public class AydreamScreen extends Screen {
                 if (MinecraftClient.getInstance().currentScreen == this) init();
             });
         }).exceptionally(error -> null);
+    }
+
+    private void openUpdates() {
+        category = "updates";
+        page = 0;
+        updateMessage = "";
+        AydreamUpdater.check(apiClient, updateInfo -> {
+            this.updateInfo = updateInfo;
+            MinecraftClient.getInstance().execute(() -> {
+                if (MinecraftClient.getInstance().currentScreen == this) init();
+            });
+        });
+        init();
+    }
+
+    private void buildUpdates() {
+        int left = 235;
+        int top = 98;
+        contextText = "Automatic update check uses the Aydream GitHub release.";
+        if (updateInfo.available()) {
+            addButton(left, top + 70, 180, 30, "Download Update", this::downloadUpdate);
+            addButton(left + 190, top + 70, 180, 30, "Restart & Update", this::restartAndUpdate);
+            addButton(left + 380, top + 70, 120, 30, "Later", () -> open("dashboard"));
+        } else {
+            addButton(left, top + 70, 180, 30, "Check Again", this::openUpdates);
+        }
+    }
+
+    private void downloadUpdate() {
+        updateMessage = "Downloading...";
+        AydreamUpdater.download(apiClient, updateInfo, result -> {
+            updateMessage = result;
+            if (result.equals("Update downloaded")) {
+                AydreamUpdater.markDownloaded(updateInfo.version());
+            }
+            MinecraftClient.getInstance().execute(() -> {
+                if (MinecraftClient.getInstance().currentScreen == this) init();
+            });
+        });
+    }
+
+    private void restartAndUpdate() {
+        updateMessage = "Preparing update...";
+        AydreamUpdater.download(apiClient, updateInfo, result -> {
+            if (!result.equals("Update downloaded")) {
+                updateMessage = result;
+                return;
+            }
+            MinecraftClient.getInstance().execute(() -> {
+                try {
+                    AydreamUpdater.scheduleReplacement(MinecraftClient.getInstance().runDirectory.toPath(), updateInfo.version());
+                    MinecraftClient.getInstance().scheduleStop();
+                } catch (Exception error) {
+                    updateMessage = "Restart failed";
+                }
+            });
+        });
     }
 
     private void buildSettings() {
@@ -839,6 +903,19 @@ public class AydreamScreen extends Screen {
                 context.drawText(textRenderer, Text.literal(contextText), mainX + 24, mainY + 235, MUTED, false);
                 context.drawText(textRenderer, Text.literal(settingsMessage), mainX + mainW - 110, mainY + 62, apiOnline ? 0xFF7CFFB2 : MUTED, false);
             }
+        }
+
+        if (category.equals("updates")) {
+            context.drawText(textRenderer, Text.literal("Current: " + AydreamUpdater.currentVersion()), mainX + 24, mainY + 82, TEXT, false);
+            if (updateInfo.available()) {
+                context.drawText(textRenderer, Text.literal("Latest: " + updateInfo.version()), mainX + 24, mainY + 104, ACCENT, true);
+                context.drawText(textRenderer, Text.literal("Update available!"), mainX + 24, mainY + 126, TEXT, false);
+            } else if (updateInfo.checked()) {
+                context.drawText(textRenderer, Text.literal("You are up to date."), mainX + 24, mainY + 104, TEXT, false);
+            } else {
+                context.drawText(textRenderer, Text.literal("Checking for updates..."), mainX + 24, mainY + 104, MUTED, false);
+            }
+            context.drawText(textRenderer, Text.literal(updateMessage), mainX + 24, mainY + 150, MUTED, false);
         }
 
         context.drawText(textRenderer, Text.literal("/dream"), 24, height - 28, MUTED, false);
