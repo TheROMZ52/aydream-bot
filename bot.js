@@ -464,6 +464,7 @@ async function runSetupPanel() {
     let apiCommandHandler = null;
     let apiResponseCapture = null;
     let apiCaptureAllowChat = false;
+    let interactiveChatAvailable = false;
 
     function loadApiToken() {
         if (!API_TOKEN.trim()) {
@@ -3700,6 +3701,13 @@ function setSkin(value, notify) {
         bot.once("spawn", () => {
 
             reconnectAttempts = 0;
+            interactiveChatAvailable = false;
+            setTimeout(() => {
+                if (!bot?.entity) return;
+                try {
+                    bot.chat("/plugins");
+                } catch {}
+            }, 1200);
 
             log("=============================================");
             log("          Minecraft Player Bot");
@@ -3997,7 +4005,7 @@ function setSkin(value, notify) {
                         const last = socialReplyCooldowns.get(username) || 0;
                         if (now - last >= 30000 && cleanMessage) {
                             socialReplyCooldowns.set(username, now);
-                            generateReply("به " + username + " پاسخ بده: " + cleanMessage, "polite", true)
+                            generateReply("به " + username + " پاسخ بده. این پاسخ برای چت ماینکرفت و بات سرور است و نباید از واژه‌های «گپ»، «گروه» یا «گاردی» استفاده کند: " + cleanMessage, "polite", true)
                                 .then((reply) => {
                                     if (reply && bot?.entity) bot.chat(reply);
                                 });
@@ -5268,6 +5276,10 @@ function setSkin(value, notify) {
             (message) => {
 
                 const text = message.toString();
+
+                if (/InteractiveChat/i.test(text)) {
+                    interactiveChatAvailable = true;
+                }
 
                 log(
                     `[SERVER] ${text}`
