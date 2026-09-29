@@ -441,18 +441,6 @@ public class AydreamScreen extends Screen {
         });
     }
 
-    private void checkForUpdates() {
-        long now = System.currentTimeMillis();
-        if (now < nextUpdateCheck) return;
-        nextUpdateCheck = now + 300000L;
-        AydreamUpdater.check(apiClient, info -> {
-            updateInfo = info;
-            MinecraftClient.getInstance().execute(() -> {
-                if (MinecraftClient.getInstance().currentScreen == this) init();
-            });
-        });
-    }
-
     private void openUpdates() {
         category = "updates";
         page = 0;
