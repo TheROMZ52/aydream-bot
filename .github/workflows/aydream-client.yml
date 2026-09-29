@@ -7,6 +7,9 @@ on:
       - ".github/workflows/aydream-client.yml"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,6 +28,18 @@ jobs:
       - run: chmod +x gradlew
       - run: ./gradlew --version
       - run: ./gradlew build --stacktrace
+      - name: Publish latest release
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(grep '^version = ' aydream-client/build.gradle | sed -E 's/version = "([^"]+)"/\1/')
+          if ! gh release view latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create latest --repo "$GITHUB_REPOSITORY" --title "Aydream Latest" --notes "version=$VERSION" --latest
+          else
+            gh release edit latest --repo "$GITHUB_REPOSITORY" --title "Aydream Latest" --notes "version=$VERSION" --latest
+          fi
+          gh release upload latest aydream-client/build/libs/AydreamClient.jar --repo "$GITHUB_REPOSITORY" --clobber
       - uses: actions/upload-artifact@v4
         with:
           name: AydreamClient
