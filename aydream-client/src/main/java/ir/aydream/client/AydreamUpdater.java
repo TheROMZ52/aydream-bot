@@ -112,8 +112,6 @@ public final class AydreamUpdater {
         String sourcePath = source.toAbsolutePath().toString().replace("'", "''");
         String targetPath = target.toAbsolutePath().toString().replace("'", "''");
         String scriptPath = script.toAbsolutePath().toString().replace("'", "''");
-        String targetPath = target.toAbsolutePath().toString().replace("'", "''");
-        String scriptPath = script.toAbsolutePath().toString().replace("'", "''");
         String content = "@echo off\r\n"
             + "timeout /t 3 /nobreak >nul\r\n"
             + "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Copy-Item -LiteralPath '" + sourcePath + "' -Destination '" + targetPath + "' -Force\"\r\n"
