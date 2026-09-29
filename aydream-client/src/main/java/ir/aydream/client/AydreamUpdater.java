@@ -10,9 +10,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.function.Consumer;
-import java.util.Optional;
-import net.fabricmc.loader.api.FabricLoader;
-import net.fabricmc.loader.api.metadata.ModOrigin;
 
 public final class AydreamUpdater {
     private static final String RELEASE_URL = "https://api.github.com/repos/TheROMZ52/aydream-bot/releases/latest";
@@ -101,12 +98,7 @@ public final class AydreamUpdater {
     public static void scheduleReplacement(Path runDir, String version) throws Exception {
         Path updateDir = runDir.resolve("mods").resolve(".aydream-update");
         Path source = updateDir.resolve(ASSET_NAME);
-        Path target = FabricLoader.getInstance().getModContainer("aydream-client")
-            .flatMap(container -> {
-                if (container.getOrigin().getKind() != ModOrigin.Kind.PATH) return Optional.empty();
-                return container.getOrigin().getPaths().stream().filter(path -> path.toString().endsWith(".jar")).findFirst();
-            })
-            .orElse(runDir.resolve("mods").resolve(ASSET_NAME));
+        Path target = runDir.resolve("mods").resolve(ASSET_NAME);
         if (!Files.exists(source)) throw new IllegalStateException("Update not downloaded");
         Path script = updateDir.resolve("apply-update.bat");
         String sourcePath = source.toAbsolutePath().toString().replace("'", "''");
