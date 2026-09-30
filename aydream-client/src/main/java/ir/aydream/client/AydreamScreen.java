@@ -79,7 +79,7 @@ public class AydreamScreen extends Screen {
     }
 
     private void buildDashboard() {
-        int panelW = Math.min(660, width - 40);
+        int panelW = dashboardPanelWidth();
         int panelX = (width - panelW) / 2;
         int panelY = 48;
         int buttonW = (panelW - 75) / 3;
@@ -130,6 +130,10 @@ public class AydreamScreen extends Screen {
             String value = SIDEBAR_VALUES[i];
             addButton(x, y + i * spacing, sidebarWidth() - 30, 28, SIDEBAR_LABELS[i], () -> open(value));
         }
+    }
+
+    private int dashboardPanelWidth() {
+        return Math.min(760, Math.max(320, width - 40));
     }
 
     private int sidebarSpacing() {
@@ -841,7 +845,7 @@ public class AydreamScreen extends Screen {
         int mainX;
         int mainW;
         if (category.equals("dashboard")) {
-            mainW = Math.min(760, Math.max(320, width - 40));
+            mainW = dashboardPanelWidth();
             mainX = (width - mainW) / 2;
         } else {
             mainX = contentLeft();
