@@ -1,4 +1,4 @@
-const { checkPanelKey, getLatestRun, github, REPO } = require("./_github");
+const { getLatestRun, github, REPO } = require("./_github");
 
 const SETTINGS = [
   "AYDREAM_HOST",
@@ -37,10 +37,6 @@ async function saveSetting(name, value) {
 }
 
 module.exports = async (req, res) => {
-  if (!checkPanelKey(req)) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
   try {
     if (req.method === "GET" && req.query?.settings === "1") {
       return res.status(200).json({ settings: await getSettings() });
