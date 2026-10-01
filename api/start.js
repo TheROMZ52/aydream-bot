@@ -1,5 +1,4 @@
 const {
-  checkPanelKey,
   getActiveRun,
   github,
   WORKFLOW
@@ -8,10 +7,6 @@ const {
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  if (!checkPanelKey(req)) {
-    return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {
