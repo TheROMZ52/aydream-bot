@@ -23,6 +23,13 @@ public class AydreamScreen extends Screen {
     private int page = 0;
     private String apiBaseUrl = "http://127.0.0.1:31880";
     private String apiToken = "";
+    private String githubToken = "";
+    private net.minecraft.client.gui.widget.TextFieldWidget githubTokenField;
+    private volatile String actionsStatus = "Not checked";
+    private volatile String actionsLog = "Open GitHub Actions to load the latest workflow status.";
+    private volatile long activeRunId = 0L;
+    private volatile boolean actionsBusy = false;
+    private long nextActionsRefresh = 0L;
     private net.minecraft.client.gui.widget.TextFieldWidget urlField;
     private net.minecraft.client.gui.widget.TextFieldWidget tokenField;
     private volatile String settingsMessage = "";
@@ -53,8 +60,8 @@ public class AydreamScreen extends Screen {
     private static final int TEXT = 0xFFF5F5F7;
     private static final int MUTED = 0xFF9FA3B2;
 
-    private static final String[] SIDEBAR_LABELS = {"Dashboard", "Players", "Movement", "Combat", "Homes", "Automation", "Activity", "Inventory", "Info", "Settings"};
-    private static final String[] SIDEBAR_VALUES = {"dashboard", "players", "movement", "combat", "homes", "automation", "activity", "inventory", "info", "settings"};
+    private static final String[] SIDEBAR_LABELS = {"Dashboard", "Players", "Movement", "Combat", "Homes", "Automation", "Activity", "Inventory", "Info", "GitHub Actions", "Settings"};
+    private static final String[] SIDEBAR_VALUES = {"dashboard", "players", "movement", "combat", "homes", "automation", "activity", "inventory", "info", "actions", "settings"};
 
     public AydreamScreen(Screen parent) {
         super(Text.literal("Aydream Client"));
@@ -158,6 +165,10 @@ public class AydreamScreen extends Screen {
         int top = 82;
         if (category.startsWith("player:")) {
             buildPlayerDetail(category.substring(7));
+            return;
+        }
+        if (category.equals("actions")) {
+            buildActions();
             return;
         }
         if (category.equals("settings")) {
@@ -533,10 +544,167 @@ public class AydreamScreen extends Screen {
         addButton(left + 140, top + 70, 130, 28, "Test", this::testConnection);
         addButton(left + 280, top + 70, 130, 28, "Reset", this::resetConfig);
 
-        contextText = "Use the token from api-token.txt.";
+        githubTokenField = new net.minecraft.client.gui.widget.TextFieldWidget(textRenderer, left, top + 60, w, 22, Text.literal("GitHub Token"));
+        githubTokenField.setMaxLength(500);
+        githubTokenField.setText(githubToken);
+        addDrawableChild(githubTokenField);
+
+        addButton(left, top + 100, 130, 28, "Save", this::saveConfig);
+        addButton(left + 140, top + 100, 130, 28, "Test", this::testConnection);
+        addButton(left + 280, top + 100, 130, 28, "Reset", this::resetConfig);
+
+        contextText = "Bot API token and GitHub token are saved in local config.";
     }
 
     private String contextText = "";
+
+    private void buildActions() {
+        int left = contentLeft() + 35;
+        int top = 98;
+        addButton(left, top, 130, 30, actionsBusy ? "Running..." : "Run", this::runGitHubWorkflow);
+        addButton(left + 145, top, 130, 30, "Stop", this::stopGitHubWorkflow);
+        addButton(left + 290, top, 130, 30, "Refresh", this::refreshGitHubActions);
+        contextText = "Workflow: aydream-client.yml";
+        if (nextActionsRefresh == 0L || System.currentTimeMillis() >= nextActionsRefresh) refreshGitHubActions();
+    }
+
+    private HttpRequest githubRequest(String path, String method, String body) {
+        if (githubToken.isBlank()) {
+            actionsStatus = "GitHub token missing";
+            actionsLog = "Add a GitHub token in Settings.";
+            return null;
+        }
+        try {
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create("https://api.github.com/repos/TheROMZ52/aydream-bot" + path))
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .header("Authorization", "Bearer " + githubToken)
+                .header("User-Agent", "AydreamClient");
+            if ("POST".equals(method)) {
+                builder.header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body == null ? "{}" : body));
+            } else {
+                builder.GET();
+            }
+            return builder.build();
+        } catch (Exception error) {
+            actionsStatus = "Request error";
+            actionsLog = error.getMessage() == null ? "Invalid GitHub request" : error.getMessage();
+            return null;
+        }
+    }
+
+    private void runGitHubWorkflow() {
+        if (actionsBusy) return;
+        HttpRequest request = githubRequest("/actions/workflows/aydream-client.yml/dispatches", "POST", "{\\"ref\\":\\"main\\"}");
+        if (request == null) return;
+        actionsBusy = true;
+        actionsStatus = "Dispatching workflow...";
+        actionsLog = "Starting aydream-client.yml";
+        apiClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
+            if (response.statusCode() == 204) {
+                actionsStatus = "Workflow dispatched";
+                actionsLog = "Workflow started. Refresh to see its run.";
+            } else {
+                actionsStatus = "Run failed: HTTP " + response.statusCode();
+                actionsLog = response.body().isBlank() ? "GitHub rejected the request." : response.body();
+            }
+            actionsBusy = false;
+            nextActionsRefresh = 0L;
+            MinecraftClient.getInstance().execute(() -> {
+                if (MinecraftClient.getInstance().currentScreen == this) init();
+            });
+        }).exceptionally(error -> {
+            actionsBusy = false;
+            actionsStatus = "GitHub offline";
+            actionsLog = error.getMessage() == null ? "Request failed" : error.getMessage();
+            return null;
+        });
+    }
+
+    private void stopGitHubWorkflow() {
+        if (activeRunId <= 0L) {
+            actionsStatus = "No active run found";
+            actionsLog = "Refresh the workflow status first.";
+            return;
+        }
+        HttpRequest request = githubRequest("/actions/runs/" + activeRunId + "/cancel", "POST", "{}");
+        if (request == null) return;
+        actionsStatus = "Stopping workflow...";
+        apiClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
+            actionsStatus = response.statusCode() == 202 ? "Cancel requested" : "Stop failed: HTTP " + response.statusCode();
+            actionsLog = response.body().isBlank() ? actionsStatus : response.body();
+            nextActionsRefresh = 0L;
+            MinecraftClient.getInstance().execute(() -> {
+                if (MinecraftClient.getInstance().currentScreen == this) init();
+            });
+        }).exceptionally(error -> {
+            actionsStatus = "GitHub offline";
+            actionsLog = error.getMessage() == null ? "Request failed" : error.getMessage();
+            return null;
+        });
+    }
+
+    private void refreshGitHubActions() {
+        nextActionsRefresh = System.currentTimeMillis() + 10000L;
+        HttpRequest request = githubRequest("/actions/workflows/aydream-client.yml/runs?per_page=1", "GET", null);
+        if (request == null) return;
+        apiClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
+            if (response.statusCode() != 200) {
+                actionsStatus = "Refresh failed: HTTP " + response.statusCode();
+                actionsLog = response.body().isBlank() ? "Could not load workflow runs." : response.body();
+                return;
+            }
+            String body = response.body();
+            String id = jsonNumber(body, "id");
+            activeRunId = id.isBlank() ? 0L : parseLong(id);
+            String status = jsonValue(body, "status");
+            String conclusion = jsonValue(body, "conclusion");
+            String title = jsonValue(body, "display_title");
+            String branch = jsonValue(body, "head_branch");
+            actionsStatus = status.isBlank() ? "No workflow runs found" : status + (conclusion.isBlank() || "null".equals(conclusion) ? "" : " / " + conclusion);
+            actionsLog = (title.isBlank() ? "Latest workflow run" : title) + (branch.isBlank() ? "" : " [" + branch + "]") + (activeRunId > 0 ? "  #" + activeRunId : "");
+            actionsBusy = "in_progress".equals(status) || "queued".equals(status) || "requested".equals(status);
+            MinecraftClient.getInstance().execute(() -> {
+                if (MinecraftClient.getInstance().currentScreen == this && category.equals("actions")) init();
+            });
+        }).exceptionally(error -> {
+            actionsStatus = "GitHub offline";
+            actionsLog = error.getMessage() == null ? "Request failed" : error.getMessage();
+            return null;
+        });
+    }
+
+    private String jsonValue(String json, String key) {
+        String marker = "\\"" + key + "\\":";
+        int i = json.indexOf(marker);
+        if (i < 0) return "";
+        int start = i + marker.length();
+        while (start < json.length() && Character.isWhitespace(json.charAt(start))) start++;
+        if (start >= json.length() || json.charAt(start) != '"') return "";
+        int end = json.indexOf('"', start + 1);
+        return end > start ? json.substring(start + 1, end) : "";
+    }
+
+    private String jsonNumber(String json, String key) {
+        String marker = "\\"" + key + "\\":";
+        int i = json.indexOf(marker);
+        if (i < 0) return "";
+        int start = i + marker.length();
+        while (start < json.length() && Character.isWhitespace(json.charAt(start))) start++;
+        int end = start;
+        while (end < json.length() && Character.isDigit(json.charAt(end))) end++;
+        return json.substring(start, end);
+    }
+
+    private long parseLong(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (Exception ignored) {
+            return 0L;
+        }
+    }
 
     private Path configPath() {
         return MinecraftClient.getInstance().runDirectory.toPath().resolve("config").resolve("aydream-client.properties");
@@ -591,6 +759,7 @@ public class AydreamScreen extends Screen {
             }
             apiBaseUrl = normalizeApiUrl(properties.getProperty("api.url", "http://127.0.0.1:31880"));
             apiToken = properties.getProperty("api.token", "");
+            githubToken = properties.getProperty("github.token", "");
         } catch (Exception ignored) {
             apiBaseUrl = "http://127.0.0.1:31880";
         }
@@ -599,12 +768,14 @@ public class AydreamScreen extends Screen {
     private void saveConfig() {
         if (urlField != null) apiBaseUrl = normalizeApiUrl(urlField.getText());
         if (tokenField != null) apiToken = tokenField.getText().trim();
+        if (githubTokenField != null) githubToken = githubTokenField.getText().trim();
         try {
             Path path = configPath();
             Files.createDirectories(path.getParent());
             java.util.Properties properties = new java.util.Properties();
             properties.setProperty("api.url", apiBaseUrl);
             properties.setProperty("api.token", apiToken);
+            properties.setProperty("github.token", githubToken);
             try (var output = Files.newOutputStream(path, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
                 properties.store(output, "Aydream Client");
             }
@@ -617,6 +788,7 @@ public class AydreamScreen extends Screen {
     private void resetConfig() {
         apiBaseUrl = "http://127.0.0.1:31880";
         apiToken = "";
+        githubToken = "";
         settingsMessage = "Reset";
         init();
     }
@@ -936,6 +1108,13 @@ public class AydreamScreen extends Screen {
                 context.fill(mainX + 24, mainY + 92, mainX + mainW - 24, mainY + 145, PANEL_LIGHT);
                 context.drawText(textRenderer, Text.literal(contextText), mainX + 36, mainY + 110, TEXT, false);
                 context.drawText(textRenderer, Text.literal("LIVE STATUS"), mainX + 36, mainY + 128, MUTED, false);
+            }
+            if (category.equals("actions")) {
+                context.drawText(textRenderer, Text.literal("STATUS  " + actionsStatus), mainX + 24, mainY + 96, ACCENT, true);
+                String logLine = actionsLog.length() > 100 ? actionsLog.substring(0, 100) + "..." : actionsLog;
+                context.drawText(textRenderer, Text.literal(logLine), mainX + 24, mainY + 122, MUTED, false);
+                context.drawText(textRenderer, Text.literal("Repository: TheROMZ52/aydream-bot"), mainX + 24, mainY + 154, TEXT, false);
+                context.drawText(textRenderer, Text.literal("Workflow: aydream-client.yml"), mainX + 24, mainY + 176, TEXT, false);
             }
             if (category.equals("settings")) {
                 context.drawText(textRenderer, Text.literal("LOCAL ONLY"), mainX + 24, mainY + 82, ACCENT, true);
