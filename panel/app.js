@@ -1,10 +1,6 @@
-const keyInput = document.getElementById("keyInput");
-const saveKey = document.getElementById("saveKey");
-const setup = document.getElementById("setup");
 const statusPill = document.getElementById("statusPill");
 const statusText = document.getElementById("statusText");
 const runNumber = document.getElementById("runNumber");
-const timerValue = document.getElementById("timerValue");
 const runStatus = document.getElementById("runStatus");
 const runConclusion = document.getElementById("runConclusion");
 const runStarted = document.getElementById("runStarted");
@@ -12,33 +8,9 @@ const runUpdated = document.getElementById("runUpdated");
 const githubLink = document.getElementById("githubLink");
 const logs = document.getElementById("logs");
 const toast = document.getElementById("toast");
-const startButton = document.getElementById("startButton");
+const runButton = document.getElementById("runButton");
 const stopButton = document.getElementById("stopButton");
-const restartButton = document.getElementById("restartButton");
 const refreshButton = document.getElementById("refreshButton");
-const saveSettings = document.getElementById("saveSettings");
-const loadSettings = document.getElementById("loadSettings");
-
-const settingFields = {
-  AYDREAM_HOST: document.getElementById("settingHost"),
-  AYDREAM_PORT: document.getElementById("settingPort"),
-  AYDREAM_USERNAME: document.getElementById("settingUsername"),
-  AYDREAM_VERSION: document.getElementById("settingVersion"),
-  AYDREAM_CONTROLLER: document.getElementById("settingController"),
-  AYDREAM_PASSWORD: document.getElementById("settingPassword")
-};
-
-let runStartedAt = null;
-
-keyInput.value = localStorage.getItem("aydream_panel_key") || "";
-
-function panelKey() {
-  return keyInput.value.trim();
-}
-
-function showSetup() {
-  setup.style.display = panelKey() ? "none" : "flex";
-}
 
 function notify(message) {
   toast.textContent = message;
@@ -48,163 +20,85 @@ function notify(message) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: {
-      "x-panel-key": panelKey(),
-      ...(options.headers || {})
-    }
-  });
-
+  const response = await fetch(path, options);
   const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data.error || "Request failed (" + response.status + ")");
-  }
-
+  if (!response.ok) throw new Error(data.error || "Request failed (" + response.status + ")");
   return data;
 }
 
-function formatDate(value) {
-  if (!value) return "—";
-  return new Date(value).toLocaleString();
-}
-
-function formatElapsed(value) {
-  if (!value) return "—";
-
-  const elapsed = Math.max(0, Date.now() - new Date(value).getTime());
-  const totalSeconds = Math.floor(elapsed / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  return [hours, minutes, seconds]
-    .map((part) => String(part).padStart(2, "0"))
-    .join(":");
+function date(value) {
+  return value ? new Date(value).toLocaleString() : "—";
 }
 
 function setBusy(busy) {
-  startButton.disabled = busy;
+  runButton.disabled = busy;
   stopButton.disabled = busy;
-  restartButton.disabled = busy;
   refreshButton.disabled = busy;
-  saveSettings.disabled = busy;
-  loadSettings.disabled = busy;
 }
 
 function render(data) {
   const run = data.run;
-
   if (!run) {
     statusPill.className = "pill offline";
     statusPill.textContent = "OFFLINE";
-    statusText.textContent = "Offline";
+    statusText.textContent = "No workflow runs";
     runNumber.textContent = "—";
-    timerValue.textContent = "—";
     runStatus.textContent = "—";
     runConclusion.textContent = "—";
     runStarted.textContent = "—";
     runUpdated.textContent = "—";
     githubLink.style.display = "none";
-    runStartedAt = null;
     return;
   }
-
-  const online = data.status === "online";
-  statusPill.className = "pill " + (online ? "online" : "offline");
-  statusPill.textContent = online ? "ONLINE" : "OFFLINE";
-  statusText.textContent =
-    run.status === "queued"
-      ? "Starting…"
-      : online
-        ? "Running"
-        : "Stopped";
-
+  const active = run.status === "in_progress" || run.status === "queued" || run.status === "requested";
+  statusPill.className = "pill " + (active ? "online" : "offline");
+  statusPill.textContent = active ? "RUNNING" : "STOPPED";
+  statusText.textContent = active ? "Workflow active" : "Workflow idle";
   runNumber.textContent = "#" + run.run_number;
-  timerValue.textContent = formatElapsed(run.created_at);
-  runStatus.textContent = run.status;
+  runStatus.textContent = run.status || "—";
   runConclusion.textContent = run.conclusion || "—";
-  runStarted.textContent = formatDate(run.created_at);
-  runUpdated.textContent = formatDate(run.updated_at);
+  runStarted.textContent = date(run.created_at);
+  runUpdated.textContent = date(run.updated_at);
   githubLink.href = run.html_url;
   githubLink.style.display = "inline-block";
-  runStartedAt = run.created_at;
 }
 
 async function refresh() {
-  if (!panelKey()) {
-    showSetup();
-    return;
-  }
-
   try {
     const data = await api("/api/status");
     render(data);
-
     const logData = await api("/api/logs");
-
-    if (!logData.logs.length) {
-      logs.innerHTML = '<div class="empty">No jobs yet.</div>';
+    if (!logData.logs?.length) {
+      logs.innerHTML = '<div class="empty">No workflow jobs yet.</div>';
       return;
     }
-
-    logs.innerHTML = logData.logs.map((job) => {
-      const conclusion = job.conclusion ? " · " + job.conclusion : "";
-      return '<div class="log-row">' +
-        '<span>' + job.name + '</span>' +
-        '<small>' + job.status + conclusion + '</small>' +
-        '<a href="' + job.html_url + '" target="_blank" rel="noreferrer">Open</a>' +
-        '</div>';
-    }).join("");
-  } catch (error) {
-    notify(error.message);
-  }
-}
-
-async function refreshSettings() {
-  if (!panelKey()) return;
-
-  try {
-    const data = await api("/api/status?settings=1");
-    for (const [name, field] of Object.entries(settingFields)) {
-      field.value = data.settings?.[name] ?? "";
+    logs.replaceChildren();
+    for (const job of logData.logs) {
+      const row = document.createElement("div");
+      row.className = "log-row";
+      const name = document.createElement("span");
+      name.textContent = job.name || "Job";
+      const status = document.createElement("small");
+      status.textContent = [job.status, job.conclusion].filter(Boolean).join(" · ");
+      const link = document.createElement("a");
+      link.href = job.html_url;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.textContent = "Open";
+      row.append(name, status, link);
+      logs.append(row);
     }
   } catch (error) {
-    notify("Settings: " + error.message);
-  }
-}
-
-async function saveSettingsNow() {
-  setBusy(true);
-
-  try {
-    const settings = {};
-    for (const [name, field] of Object.entries(settingFields)) {
-      settings[name] = field.value;
-    }
-
-    await api("/api/status?settings=1", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ settings })
-    });
-
-    notify("Settings saved.");
-  } catch (error) {
     notify(error.message);
-  } finally {
-    setBusy(false);
   }
 }
 
 async function action(path, label) {
   setBusy(true);
-
   try {
-    await api(path, { method: "POST" });
-    notify(label);
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const result = await api(path, { method: "POST" });
+    notify(result.message || label);
+    await new Promise(resolve => setTimeout(resolve, 1000));
     await refresh();
   } catch (error) {
     notify(error.message);
@@ -213,56 +107,8 @@ async function action(path, label) {
   }
 }
 
-saveKey.addEventListener("click", () => {
-  const value = panelKey();
-
-  if (!value) {
-    notify("Enter a panel key first.");
-    return;
-  }
-
-  localStorage.setItem("aydream_panel_key", value);
-  showSetup();
-  refresh();
-  refreshSettings();
-});
-
-keyInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    saveKey.click();
-  }
-});
-
-startButton.addEventListener("click", () => action("/api/start", "Start requested."));
+runButton.addEventListener("click", () => action("/api/start", "Run requested."));
 stopButton.addEventListener("click", () => action("/api/stop", "Stop requested."));
-
-restartButton.addEventListener("click", async () => {
-  setBusy(true);
-
-  try {
-    await api("/api/stop", { method: "POST" });
-    await new Promise((resolve) => setTimeout(resolve, 1800));
-    await api("/api/start", { method: "POST" });
-    notify("Restart requested.");
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    await refresh();
-  } catch (error) {
-    notify(error.message);
-  } finally {
-    setBusy(false);
-  }
-});
-
 refreshButton.addEventListener("click", refresh);
-saveSettings.addEventListener("click", saveSettingsNow);
-loadSettings.addEventListener("click", refreshSettings);
-
-setInterval(() => {
-  if (runStartedAt) {
-    timerValue.textContent = formatElapsed(runStartedAt);
-  }
-}, 1000);
-
-showSetup();
 refresh();
-refreshSettings();
+setInterval(refresh, 10000);
