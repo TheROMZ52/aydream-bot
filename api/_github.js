@@ -61,10 +61,12 @@ async function getLatestRun() {
 
 async function getActiveRun() {
   const data = await github(
-    "/repos/" + REPO + "/actions/workflows/" + WORKFLOW + "/runs?status=in_progress&per_page=1"
+    "/repos/" + REPO + "/actions/workflows/" + WORKFLOW + "/runs?per_page=10"
   );
 
-  return data.workflow_runs?.[0] || null;
+  return (data.workflow_runs || []).find((run) =>
+    ["in_progress", "queued", "requested", "waiting", "pending"].includes(run.status)
+  ) || null;
 }
 
 module.exports = {
