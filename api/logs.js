@@ -1,12 +1,8 @@
-const { checkPanelKey, getLatestRun, github } = require("./_github");
+const { getLatestRun, github } = require("./_github");
 
 module.exports = async (req, res) => {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  if (!checkPanelKey(req)) {
-    return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {
