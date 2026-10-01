@@ -603,7 +603,7 @@ public class AydreamScreen extends Screen {
         actionsStatus = "Dispatching workflow...";
         actionsLog = "Starting aydream-client.yml";
         apiClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
-            if (response.statusCode() == 204) {
+            if (response.statusCode() == 204 || response.statusCode() == 200) {
                 actionsStatus = "Workflow dispatched";
                 actionsLog = "Workflow started. Refresh to see its run.";
             } else {
@@ -666,9 +666,7 @@ public class AydreamScreen extends Screen {
             actionsStatus = status.isBlank() ? "No workflow runs found" : status + (conclusion.isBlank() || "null".equals(conclusion) ? "" : " / " + conclusion);
             actionsLog = (title.isBlank() ? "Latest workflow run" : title) + (branch.isBlank() ? "" : " [" + branch + "]") + (activeRunId > 0 ? "  #" + activeRunId : "");
             actionsBusy = "in_progress".equals(status) || "queued".equals(status) || "requested".equals(status);
-            MinecraftClient.getInstance().execute(() -> {
-                if (MinecraftClient.getInstance().currentScreen == this && category.equals("actions")) init();
-            });
+
         }).exceptionally(error -> {
             actionsStatus = "GitHub offline";
             actionsLog = error.getMessage() == null ? "Request failed" : error.getMessage();
