@@ -3,114 +3,51 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Aydream Control</title>
+  <title>Aydream Actions Console</title>
   <link rel="stylesheet" href="/panel/style.css">
 </head>
 <body>
   <main class="shell">
-    <section class="hero">
+    <header class="hero">
       <div>
-        <p class="eyebrow">MINEFLAYER CONTROL</p>
-        <h1>Aydream</h1>
-        <p class="sub">Start the bot when you need it. GitHub Actions provides the runtime.</p>
+        <p class="eyebrow">GITHUB ACTIONS</p>
+        <h1>Aydream Console</h1>
+        <p class="sub">Run or stop the Aydream GitHub Actions workflow.</p>
       </div>
       <div id="statusPill" class="pill offline">OFFLINE</div>
-    </section>
-
-    <section class="grid">
-      <article class="card status-card">
-        <div class="card-head">
-          <div>
-            <p class="label">RUNTIME</p>
-            <h2 id="statusText">Offline</h2>
-          </div>
-          <div id="runNumber" class="run-number">—</div>
+    </header>
+    <section class="card console-card">
+      <div class="card-head">
+        <div>
+          <p class="label">WORKFLOW</p>
+          <h2 id="statusText">Loading status…</h2>
         </div>
-
-        <div class="timer">
-          <span id="timerValue">—</span>
-          <small>session</small>
-        </div>
-
-        <div class="actions">
-          <button id="startButton" class="primary">Start</button>
-          <button id="stopButton" class="danger">Stop</button>
-          <button id="restartButton" class="secondary">Restart</button>
-        </div>
-      </article>
-
-      <article class="card">
-        <div class="card-head">
-          <div>
-            <p class="label">RUN</p>
-            <h2>Activity</h2>
-          </div>
-          <button id="refreshButton" class="icon-button">Refresh</button>
-        </div>
-
-        <div class="facts">
-          <div><span>Status</span><strong id="runStatus">—</strong></div>
-          <div><span>Conclusion</span><strong id="runConclusion">—</strong></div>
-          <div><span>Started</span><strong id="runStarted">—</strong></div>
-          <div><span>Updated</span><strong id="runUpdated">—</strong></div>
-        </div>
-
-        <a id="githubLink" class="github-link" href="#" target="_blank" rel="noreferrer">Open GitHub run</a>
-      </article>
-
-      <article class="card settings-card">
-        <div class="card-head">
-          <div>
-            <p class="label">CONFIGURATION</p>
-            <h2>Aydream settings</h2>
-          </div>
-          <span class="settings-note">Saved to GitHub Actions variables</span>
-        </div>
-
-        <div class="settings-grid">
-          <label>Host<input id="settingHost" autocomplete="off" placeholder="gold.magmanode.com"></label>
-          <label>Port<input id="settingPort" inputmode="numeric" autocomplete="off" placeholder="27571"></label>
-          <label>Username<input id="settingUsername" autocomplete="off" placeholder="Bot username"></label>
-          <label>Version<input id="settingVersion" autocomplete="off" placeholder="1.21.1"></label>
-          <label>Controller<input id="settingController" autocomplete="off" placeholder="TheROMZ52"></label>
-          <label>Password<input id="settingPassword" type="password" autocomplete="new-password" placeholder="Bot password"></label>
-        </div>
-
-        <div class="settings-actions">
-          <button id="loadSettings" class="secondary">Reload</button>
-          <button id="saveSettings" class="primary">Save settings</button>
-        </div>
-        <p class="settings-warning">These values are stored as GitHub Actions variables. Use a GitHub Actions secret instead of this panel for sensitive passwords.</p>
-      </article>
-
-      <article class="card logs-card">
-        <div class="card-head">
-          <div>
-            <p class="label">LOGS</p>
-            <h2>Runner output</h2>
-          </div>
-        </div>
-        <div id="logs" class="logs">
-          <div class="empty">No run yet.</div>
-        </div>
-      </article>
-    </section>
-
-    <section id="setup" class="setup card">
-      <div>
-        <p class="label">FIRST SETUP</p>
-        <h2>Panel key</h2>
-        <p>Enter the private key configured as PANEL_KEY in Vercel. It stays in this browser only.</p>
+        <div id="runNumber" class="run-number">—</div>
       </div>
-      <div class="key-row">
-        <input id="keyInput" type="password" autocomplete="off" placeholder="Panel key">
-        <button id="saveKey" class="primary">Save</button>
+      <div class="facts">
+        <div><span>Run status</span><strong id="runStatus">—</strong></div>
+        <div><span>Conclusion</span><strong id="runConclusion">—</strong></div>
+        <div><span>Started</span><strong id="runStarted">—</strong></div>
+        <div><span>Last updated</span><strong id="runUpdated">—</strong></div>
       </div>
+      <div class="actions">
+        <button id="runButton" class="primary">Run</button>
+        <button id="stopButton" class="danger">Stop</button>
+        <button id="refreshButton" class="secondary">Refresh</button>
+      </div>
+      <a id="githubLink" class="github-link" href="#" target="_blank" rel="noreferrer">Open GitHub Actions run</a>
     </section>
-
+    <section class="card logs-card">
+      <div class="card-head">
+        <div>
+          <p class="label">CONSOLE</p>
+          <h2>Workflow jobs</h2>
+        </div>
+      </div>
+      <div id="logs" class="logs"><div class="empty">Loading…</div></div>
+    </section>
     <div id="toast" class="toast"></div>
   </main>
-
   <script src="/panel/app.js"></script>
 </body>
 </html>
