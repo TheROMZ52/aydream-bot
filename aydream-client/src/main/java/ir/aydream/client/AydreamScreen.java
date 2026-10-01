@@ -597,7 +597,7 @@ public class AydreamScreen extends Screen {
 
     private void runGitHubWorkflow() {
         if (actionsBusy) return;
-        HttpRequest request = githubRequest("/actions/workflows/aydream-client.yml/dispatches", "POST", "{\\"ref\\":\\"main\\"}");
+        HttpRequest request = githubRequest("/actions/workflows/aydream-client.yml/dispatches", "POST", "{\"ref\":\"main\"}");
         if (request == null) return;
         actionsBusy = true;
         actionsStatus = "Dispatching workflow...";
@@ -675,7 +675,7 @@ public class AydreamScreen extends Screen {
     }
 
     private String jsonValue(String json, String key) {
-        String marker = "\\"" + key + "\\":";
+        String marker = "\\\"" + key + "\\":";
         int i = json.indexOf(marker);
         if (i < 0) return "";
         int start = i + marker.length();
@@ -686,7 +686,7 @@ public class AydreamScreen extends Screen {
     }
 
     private String jsonNumber(String json, String key) {
-        String marker = "\\"" + key + "\\":";
+        String marker = "\\\"" + key + "\\":";
         int i = json.indexOf(marker);
         if (i < 0) return "";
         int start = i + marker.length();
