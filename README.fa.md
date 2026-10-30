@@ -1,3 +1,5 @@
+[فارسی](README.fa.md) · [English](README.md)
+
 # AyDream — ربات و کلاینت Minecraft
 
 AyDream یک پروژهٔ اتوماسیون Minecraft است که از یک ربات مبتنی بر Mineflayer با Node.js، یک ماژول کلاینت Fabric و یک پنل کنترل از راه دور مبتنی بر GitHub Actions تشکیل شده است.
