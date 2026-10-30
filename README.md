@@ -1,3 +1,5 @@
+[English](README.md) · [فارسی](README.fa.md)
+
 # AyDream — Minecraft Bot & Client
 
 AyDream is a Minecraft automation project built around a Node.js Mineflayer bot, a Fabric client module, and a GitHub Actions-powered remote control panel.
